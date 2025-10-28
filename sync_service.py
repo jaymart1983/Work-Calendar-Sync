@@ -223,7 +223,10 @@ def sync_calendar(ics_url, calendar_id):
                             body=gcal_event
                         ).execute()
                         updated += 1
-                        log_event('UPDATE', f'Updated event: {gcal_event["summary"]}')
+                        # Get event date for logging
+                        event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
+                        event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
+                        log_event('UPDATE', f'Updated: {gcal_event["summary"]} ({event_date_str})')
                         # Rate limit: 1 request per second to avoid API quota
                         sleep(1.1)
                     else:
@@ -232,7 +235,10 @@ def sync_calendar(ics_url, calendar_id):
                             body=gcal_event
                         ).execute()
                         added += 1
-                        log_event('ADD', f'Added event: {gcal_event["summary"]}')
+                        # Get event date for logging
+                        event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
+                        event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
+                        log_event('ADD', f'Added: {gcal_event["summary"]} ({event_date_str})')
                         # Rate limit: 1 request per second to avoid API quota
                         sleep(1.1)
                 
