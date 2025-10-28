@@ -25,7 +25,7 @@
             {% if config.ics_timezone or config.gcal_timezone %}
             <p style="margin-top: 10px;"><strong>Timezones:</strong><br>
                 ICS: {{ config.ics_timezone or 'Unknown' }}{% if config.ics_offset %} ({{ config.ics_offset }}){% endif %}<br>
-                Google Calendar: {{ config.gcal_timezone or 'Unknown' }}
+                Google Calendar: {{ config.gcal_timezone or 'Unknown' }}{% if config.gcal_offset %} ({{ config.gcal_offset }}){% endif %}
             </p>
             {% endif %}
         </div>

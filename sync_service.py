@@ -239,6 +239,19 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         gcal_info = service.calendars().get(calendarId=calendar_id).execute()
         gcal_timezone = gcal_info.get('timeZone', 'Unknown')
         
+        # Calculate Google Calendar offset
+        gcal_offset = None
+        if gcal_timezone and gcal_timezone != 'Unknown':
+            try:
+                import pytz
+                tz = pytz.timezone(gcal_timezone)
+                # Get current offset (accounts for DST)
+                offset = tz.localize(datetime.now()).strftime('%z')
+                if offset:
+                    gcal_offset = f"{offset[:3]}:{offset[3:]}"
+            except Exception:
+                pass
+        
         # Get existing events
         existing_events = {}
         page_token = None
@@ -463,10 +476,13 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         if gcal_timezone and not config.get('gcal_timezone'):
             config['gcal_timezone'] = gcal_timezone
             config_updated = True
+        if gcal_offset and not config.get('gcal_offset'):
+            config['gcal_offset'] = gcal_offset
+            config_updated = True
         
         if config_updated:
             save_config(config)
-            log_event('INFO', f'Detected timezones - ICS: {ics_timezone} ({ics_offset}), Google Calendar: {gcal_timezone}')
+            log_event('INFO', f'Detected timezones - ICS: {ics_timezone} ({ics_offset}), Google Calendar: {gcal_timezone} ({gcal_offset})')
         
         return {'added': added, 'updated': updated, 'deleted': deleted, 'errors': errors}
     
