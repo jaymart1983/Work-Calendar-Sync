@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY sync_service.py .
 COPY web_app.py .
 COPY templates/ templates/
+COPY static/ static/
 
 # Create directories for data and secrets
 RUN mkdir -p /app/data /app/secrets
