@@ -214,9 +214,30 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         ics_cal = fetch_ics_calendar(ics_url)
         log_event('SUCCESS', 'ICS calendar fetched successfully')
         
+        # Detect ICS timezone from first timed event
+        ics_timezone = None
+        ics_offset = None
+        for component in ics_cal.walk():
+            if component.name == "VEVENT":
+                dtstart = component.get('dtstart')
+                if dtstart:
+                    start_dt = dtstart.dt
+                    if isinstance(start_dt, datetime) and start_dt.tzinfo:
+                        if hasattr(start_dt.tzinfo, 'zone'):
+                            ics_timezone = start_dt.tzinfo.zone
+                        # Get offset
+                        offset = start_dt.strftime('%z')
+                        if offset:
+                            ics_offset = f"{offset[:3]}:{offset[3:]}"
+                        break
+        
         # Authenticate
         service = get_google_calendar_service()
         log_event('SUCCESS', 'Google Calendar authenticated')
+        
+        # Get Google Calendar timezone
+        gcal_info = service.calendars().get(calendarId=calendar_id).execute()
+        gcal_timezone = gcal_info.get('timeZone', 'Unknown')
         
         # Get existing events
         existing_events = {}
@@ -429,6 +450,23 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
             'errors': errors,
             'skipped': skipped if quick_sync else 0
         })
+        
+        # Update config with detected timezone info
+        config = load_config()
+        config_updated = False
+        if ics_timezone and not config.get('ics_timezone'):
+            config['ics_timezone'] = ics_timezone
+            config_updated = True
+        if ics_offset and not config.get('ics_offset'):
+            config['ics_offset'] = ics_offset
+            config_updated = True
+        if gcal_timezone and not config.get('gcal_timezone'):
+            config['gcal_timezone'] = gcal_timezone
+            config_updated = True
+        
+        if config_updated:
+            save_config(config)
+            log_event('INFO', f'Detected timezones - ICS: {ics_timezone} ({ics_offset}), Google Calendar: {gcal_timezone}')
         
         return {'added': added, 'updated': updated, 'deleted': deleted, 'errors': errors}
     

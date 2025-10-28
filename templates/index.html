@@ -22,6 +22,12 @@
             <p style="word-break: break-all; overflow-wrap: anywhere;"><strong>ICS URL:</strong><br>{{ config.ics_url or 'Not configured' }}</p>
             <p style="margin-top: 10px; word-break: break-all; overflow-wrap: anywhere;"><strong>Calendar ID:</strong><br>{{ config.calendar_id or 'primary' }}</p>
             <p style="margin-top: 10px;"><strong>Sync Interval:</strong><br>{{ config.sync_interval or 900 }} seconds ({{ ((config.sync_interval or 900) / 60) | int }} minutes)</p>
+            {% if config.ics_timezone or config.gcal_timezone %}
+            <p style="margin-top: 10px;"><strong>Timezones:</strong><br>
+                ICS: {{ config.ics_timezone or 'Unknown' }}{% if config.ics_offset %} ({{ config.ics_offset }}){% endif %}<br>
+                Google Calendar: {{ config.gcal_timezone or 'Unknown' }}
+            </p>
+            {% endif %}
         </div>
         
         <div>
