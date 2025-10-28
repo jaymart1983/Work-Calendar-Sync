@@ -53,6 +53,8 @@ spec:
         app: calendar-sync
         app.kubernetes.io/name: calendar-sync
     spec:
+      imagePullSecrets:
+      - name: ghcr-secret
       containers:
       - name: calendar-sync
         image: ghcr.io/jaymart1983/work-calendar-sync:latest
@@ -124,7 +126,6 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:

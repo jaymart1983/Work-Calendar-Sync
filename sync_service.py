@@ -280,6 +280,14 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                         # Compare start/end times (only date or dateTime, ignore timezone differences)
                         existing_start = existing_event.get('start', {})
                         new_start = gcal_event.get('start', {})
+                        
+                        # Debug logging
+                        print(f"DEBUG: Comparing event '{gcal_event['summary']}'")
+                        print(f"  Existing start: {existing_start}")
+                        print(f"  New start: {new_start}")
+                        print(f"  Existing end: {existing_event.get('end', {})}")
+                        print(f"  New end: {gcal_event.get('end', {})}")
+                        
                         start_changed = (
                             existing_start.get('date') != new_start.get('date') or
                             existing_start.get('dateTime', '').split('+')[0].split('Z')[0] != 
