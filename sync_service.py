@@ -288,25 +288,27 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                         
                         # Compare start/end times - need to handle date vs dateTime properly
                         def normalize_datetime(dt_dict):
-                            """Normalize a datetime dict for comparison."""
+                            """Normalize a datetime dict for comparison by converting to UTC."""
+                            from dateutil import parser
+                            
                             if 'date' in dt_dict:
                                 return ('date', dt_dict['date'])
                             elif 'dateTime' in dt_dict:
-                                # Strip timezone info for comparison
+                                # Parse the datetime string (handles timezone offsets)
                                 dt_str = dt_dict['dateTime']
-                                # Remove timezone suffix
-                                # Handle formats like: 2025-11-04T00:00:00Z or 2025-11-04T00:00:00+00:00
-                                if 'Z' in dt_str:
-                                    dt_str = dt_str.split('Z')[0]
-                                elif '+' in dt_str:
-                                    dt_str = dt_str.split('+')[0]
-                                elif dt_str.count('-') > 2:  # Has timezone like -05:00
-                                    # Split by T first, then handle time part
-                                    parts = dt_str.split('T')
-                                    if len(parts) == 2 and '-' in parts[1]:
-                                        time_part = parts[1].split('-')[0]
-                                        dt_str = f"{parts[0]}T{time_part}"
-                                return ('dateTime', dt_str)
+                                try:
+                                    dt = parser.isoparse(dt_str)
+                                    # Convert to UTC for comparison
+                                    if dt.tzinfo:
+                                        dt_utc = dt.astimezone(timezone.utc)
+                                    else:
+                                        # Treat naive datetime as UTC
+                                        dt_utc = dt.replace(tzinfo=timezone.utc)
+                                    # Return just the UTC time for comparison
+                                    return ('dateTime', dt_utc.strftime('%Y-%m-%dT%H:%M:%S'))
+                                except Exception as e:
+                                    # Fallback to string comparison if parsing fails
+                                    return ('dateTime', dt_str)
                             return (None, None)
                         
                         existing_start = existing_event.get('start', {})
