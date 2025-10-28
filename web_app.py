@@ -72,9 +72,13 @@ def api_trigger_sync():
         if not config.get('ics_url'):
             return jsonify({'status': 'error', 'message': 'No ICS URL configured'}), 400
         
+        # Get quick_sync parameter from query string (default: False for full sync)
+        quick_sync = request.args.get('quick_sync', 'false').lower() == 'true'
+        
         result = sync_service.sync_calendar(
             config['ics_url'],
-            config.get('calendar_id', 'primary')
+            config.get('calendar_id', 'primary'),
+            quick_sync=quick_sync
         )
         return jsonify({'status': 'success', 'result': result})
     except Exception as e:

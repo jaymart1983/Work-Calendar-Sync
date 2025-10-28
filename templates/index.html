@@ -26,8 +26,11 @@
         
         <div>
             <h3 style="font-size: 16px; margin-bottom: 10px;">Actions</h3>
-            <button class="btn" onclick="triggerSync()" id="syncBtn">Trigger Sync Now</button>
-            <p class="help-text" style="margin-top: 10px;">Manually trigger a calendar sync outside the regular schedule.</p>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn" onclick="triggerSync(false)" id="fullSyncBtn">Full Sync</button>
+                <button class="btn" onclick="triggerSync(true)" id="quickSyncBtn">7-Day Sync</button>
+            </div>
+            <p class="help-text" style="margin-top: 10px;">Manually trigger a sync: Full syncs all events, 7-Day syncs only the next week.</p>
             
             <div id="syncResult" style="margin-top: 15px;"></div>
         </div>
@@ -111,22 +114,25 @@
             });
     }
     
-    function triggerSync() {
-        const btn = document.getElementById('syncBtn');
+    function triggerSync(quickSync) {
+        const fullBtn = document.getElementById('fullSyncBtn');
+        const quickBtn = document.getElementById('quickSyncBtn');
         const result = document.getElementById('syncResult');
         
-        btn.disabled = true;
-        btn.textContent = 'Syncing...';
-        result.innerHTML = '<p style="color: #666;">Sync in progress...</p>';
+        fullBtn.disabled = true;
+        quickBtn.disabled = true;
         
-        fetch('/api/sync/trigger', { method: 'POST' })
+        const syncType = quickSync ? '7-Day' : 'Full';
+        result.innerHTML = `<p style="color: #666;">${syncType} sync in progress...</p>`;
+        
+        fetch(`/api/sync/trigger?quick_sync=${quickSync}`, { method: 'POST' })
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
                     result.innerHTML = `
                         <div class="status success">
-                            ✓ Sync completed successfully!<br>
-                            Added: ${data.result.added}, Updated: ${data.result.updated}, Errors: ${data.result.errors}
+                            ✓ ${syncType} sync completed successfully!<br>
+                            Added: ${data.result.added}, Updated: ${data.result.updated}, Deleted: ${data.result.deleted}, Errors: ${data.result.errors}
                         </div>
                     `;
                     loadRecentLogs();
@@ -146,8 +152,8 @@
                 `;
             })
             .finally(() => {
-                btn.disabled = false;
-                btn.textContent = 'Trigger Sync Now';
+                fullBtn.disabled = false;
+                quickBtn.disabled = false;
             });
     }
     
