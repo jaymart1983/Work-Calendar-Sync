@@ -238,6 +238,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         # Process events
         added = 0
         updated = 0
+        no_change = 0
         errors = 0
         skipped = 0
         
@@ -252,18 +253,38 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     ical_uid = gcal_event.get('iCalUID')
                     
                     if ical_uid and ical_uid in existing_events:
-                        service.events().update(
+                        # Get existing event to compare
+                        existing_event = service.events().get(
                             calendarId=calendar_id,
-                            eventId=existing_events[ical_uid],
-                            body=gcal_event
+                            eventId=existing_events[ical_uid]
                         ).execute()
-                        updated += 1
-                        # Get event date for logging
+                        
+                        # Check if event actually changed (compare key fields)
+                        has_changes = (
+                            existing_event.get('summary') != gcal_event.get('summary') or
+                            existing_event.get('description') != gcal_event.get('description') or
+                            existing_event.get('location') != gcal_event.get('location') or
+                            existing_event.get('start') != gcal_event.get('start') or
+                            existing_event.get('end') != gcal_event.get('end')
+                        )
+                        
                         event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
                         event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
-                        log_event('UPDATE', f'Updated: {gcal_event["summary"]} ({event_date_str})')
-                        # Rate limit: 1 request per second to avoid API quota
-                        sleep(1.1)
+                        
+                        if has_changes:
+                            # Update the event
+                            service.events().update(
+                                calendarId=calendar_id,
+                                eventId=existing_events[ical_uid],
+                                body=gcal_event
+                            ).execute()
+                            updated += 1
+                            log_event('UPDATE', f'Updated: {gcal_event["summary"]} ({event_date_str})')
+                            # Rate limit: 1 request per second to avoid API quota
+                            sleep(1.1)
+                        else:
+                            # No changes needed
+                            no_change += 1
                     else:
                         service.events().insert(
                             calendarId=calendar_id,
@@ -283,12 +304,13 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     # Back off on errors to avoid hammering the API
                     sleep(2)
         
-        log_message = f'Sync completed: {added} added, {updated} updated, {errors} errors'
+        log_message = f'Sync completed: {added} added, {updated} updated, {no_change} no change, {errors} errors'
         if quick_sync:
             log_message += f', {skipped} skipped (outside 7-day window)'
         log_event('SUCCESS', log_message, {
             'added': added,
             'updated': updated,
+            'no_change': no_change,
             'errors': errors,
             'skipped': skipped if quick_sync else 0
         })

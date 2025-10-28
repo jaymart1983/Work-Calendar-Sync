@@ -38,6 +38,11 @@
         background: #f0f5ff;
     }
     
+    .log-entry.NO_CHANGE {
+        border-left-color: #adb5bd;
+        background: #f8f9fa;
+    }
+    
     .log-timestamp {
         color: #666;
         margin-right: 10px;
@@ -103,6 +108,7 @@
         <button class="filter-btn" data-level="SUCCESS" onclick="filterLogs('SUCCESS')">Success</button>
         <button class="filter-btn" data-level="ADD" onclick="filterLogs('ADD')">Additions</button>
         <button class="filter-btn" data-level="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
+        <button class="filter-btn" data-level="NO_CHANGE" onclick="filterLogs('NO_CHANGE')">No Change</button>
         <button class="filter-btn" data-level="INFO" onclick="filterLogs('INFO')">Info</button>
     </div>
     
@@ -180,6 +186,7 @@
             'SUCCESS': '✓',
             'ADD': '➕',
             'UPDATE': '🔄',
+            'NO_CHANGE': '➖',
             'INFO': 'ℹ️'
         };
         return icons[level] || 'ℹ️';

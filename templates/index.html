@@ -83,14 +83,16 @@
                                     log.level === 'WARNING' ? '⚠️' : 
                                     log.level === 'SUCCESS' ? '✓' : 
                                     log.level === 'ADD' ? '➕' :
-                                    log.level === 'UPDATE' ? '🔄' : 'ℹ️';
+                                    log.level === 'UPDATE' ? '🔄' : 
+                                    log.level === 'NO_CHANGE' ? '➖' : 'ℹ️';
                     
                     html += `<div style="padding: 8px; border-left: 3px solid ${
                         log.level === 'ERROR' ? '#dc3545' :
                         log.level === 'WARNING' ? '#ffc107' :
                         log.level === 'SUCCESS' ? '#28a745' :
                         log.level === 'ADD' ? '#17a2b8' :
-                        log.level === 'UPDATE' ? '#007bff' : '#6c757d'
+                        log.level === 'UPDATE' ? '#007bff' :
+                        log.level === 'NO_CHANGE' ? '#adb5bd' : '#6c757d'
                     }; margin-bottom: 5px; background: #f8f9fa;">
                         <span style="color: #666;">${new Date(log.timestamp).toLocaleString()}</span>
                         <strong style="margin-left: 10px;">${levelIcon} ${log.level}</strong>
