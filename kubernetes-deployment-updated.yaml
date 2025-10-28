@@ -50,8 +50,8 @@ spec:
     spec:
       containers:
       - name: calendar-sync
-        # Replace YOUR_GITHUB_USERNAME with your actual GitHub username
-        image: ghcr.io/YOUR_GITHUB_USERNAME/work-calendar-sync:latest
+        # Docker image from GitHub Container Registry
+        image: ghcr.io/jaymart1983/work-calendar-sync:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
