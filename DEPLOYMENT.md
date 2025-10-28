@@ -38,27 +38,27 @@ The GitHub Actions workflow will automatically build and push Docker images to G
 
 For Kubernetes deployment, use a service account instead of OAuth:
 
-```bash
-# 1. Create service account in Google Cloud Console
-# 2. Download the JSON key file
-# 3. Base64 encode it
-cat credentials.json | base64 | tr -d '\n' > credentials-base64.txt
-```
+1. Create service account in Google Cloud Console
+2. Download the JSON key file
+3. Save it as `secrets/credentials.json` in your project directory
+4. **DO NOT** commit this file to git (it's in .gitignore)
 
 ## Step 4: Update Kubernetes Manifest
 
-Edit `kubernetes-deployment-updated.yaml`:
+Edit `kubernetes-deployment-final.yaml`:
 
-1. Replace `YOUR_GITHUB_USERNAME` with your actual GitHub username
-2. Replace `<BASE64_ENCODED_CREDENTIALS>` with the content from `credentials-base64.txt`
-3. Update the ingress hostname to your domain
-4. Change `SECRET_KEY` to a random string
+1. Update the ingress hostname to your domain
+2. Change `SECRET_KEY` to a random string
+3. Review resource limits based on your cluster
 
 ## Step 5: Deploy to Kubernetes
 
 ```bash
 # Apply the deployment
-kubectl apply -f kubernetes-deployment-updated.yaml
+kubectl apply -f kubernetes-deployment-final.yaml
+
+# Create the secret from your credentials file
+./create-secret.sh
 
 # Check deployment status
 kubectl get pods -n calendar-sync

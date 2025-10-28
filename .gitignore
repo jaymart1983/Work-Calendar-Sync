@@ -26,12 +26,18 @@ env/
 ENV/
 .venv
 
-# Sensitive files
+# Sensitive files - OAuth credentials
 credentials.json
+client_secret_*.json
+*-base64.txt
 token.pickle
+
+# Application data - runtime files
 config.json
 sync_logs.json
 *.log
+app.log
+nohup.out
 
 # IDE
 .vscode/
@@ -44,6 +50,8 @@ sync_logs.json
 .DS_Store
 Thumbs.db
 
-# Data directories
+# Data directories - exclude all runtime data and secrets
+data/
+secrets/
 /app/data/
 /app/secrets/

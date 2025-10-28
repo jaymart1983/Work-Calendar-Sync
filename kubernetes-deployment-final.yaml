@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: calendar-sync
+---
+# Secret must be created separately with:
+# kubectl create secret generic google-credentials \
+#   --from-file=credentials.json=/path/to/credentials.json \
+#   -n calendar-sync
+#
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: google-credentials
+#   namespace: calendar-sync
+# type: Opaque
+# data:
+#   credentials.json: <BASE64_ENCODED_CREDENTIALS_HERE>
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: calendar-sync-data
+  namespace: calendar-sync
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendar-sync
+  namespace: calendar-sync
+  labels:
+    app: calendar-sync
+    app.kubernetes.io/name: calendar-sync
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: calendar-sync
+  template:
+    metadata:
+      labels:
+        app: calendar-sync
+        app.kubernetes.io/name: calendar-sync
+    spec:
+      containers:
+      - name: calendar-sync
+        image: ghcr.io/jaymart1983/work-calendar-sync:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: SECRET_KEY
+          value: "cal-sync-prod-key-2025-k3s"
+        volumeMounts:
+        - name: credentials
+          mountPath: /app/secrets
+          readOnly: true
+        - name: data
+          mountPath: /app/data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: credentials
+        secret:
+          secretName: google-credentials
+      - name: data
+        persistentVolumeClaim:
+          claimName: calendar-sync-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar-sync
+  namespace: calendar-sync
+  labels:
+    app: calendar-sync
+    app.kubernetes.io/name: calendar-sync
+spec:
+  selector:
+    app: calendar-sync
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+    name: http
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: calendar-sync
+  namespace: calendar-sync
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: calendar.iamjason.net
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: calendar-sync
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - calendar.iamjason.net
+    secretName: calendar-sync-tls
