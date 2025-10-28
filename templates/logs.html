@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - ICS to Google Calendar Sync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .log-entry {
+        padding: 10px;
+        margin-bottom: 5px;
+        border-left: 3px solid #6c757d;
+        background: #f8f9fa;
+        font-size: 13px;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .log-entry.ERROR {
+        border-left-color: #dc3545;
+        background: #fff5f5;
+    }
+    
+    .log-entry.WARNING {
+        border-left-color: #ffc107;
+        background: #fffbf0;
+    }
+    
+    .log-entry.SUCCESS {
+        border-left-color: #28a745;
+        background: #f0fff4;
+    }
+    
+    .log-entry.ADD {
+        border-left-color: #17a2b8;
+        background: #f0f9ff;
+    }
+    
+    .log-entry.UPDATE {
+        border-left-color: #007bff;
+        background: #f0f5ff;
+    }
+    
+    .log-timestamp {
+        color: #666;
+        margin-right: 10px;
+    }
+    
+    .log-level {
+        font-weight: bold;
+        margin-right: 10px;
+        display: inline-block;
+        min-width: 80px;
+    }
+    
+    .log-message {
+        color: #333;
+    }
+    
+    .filters {
+        margin-bottom: 20px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .filter-btn {
+        padding: 5px 15px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .filter-btn.active {
+        background: #4285f4;
+        color: white;
+        border-color: #4285f4;
+    }
+    
+    .auto-refresh {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">Sync Logs</h2>
+        <div class="auto-refresh">
+            <label>
+                <input type="checkbox" id="autoRefresh" checked> Auto-refresh
+            </label>
+            <span id="refreshStatus" style="color: #666; font-size: 12px;"></span>
+        </div>
+    </div>
+    
+    <div class="filters">
+        <button class="filter-btn active" data-level="ALL" onclick="filterLogs('ALL')">All</button>
+        <button class="filter-btn" data-level="ERROR" onclick="filterLogs('ERROR')">Errors</button>
+        <button class="filter-btn" data-level="WARNING" onclick="filterLogs('WARNING')">Warnings</button>
+        <button class="filter-btn" data-level="SUCCESS" onclick="filterLogs('SUCCESS')">Success</button>
+        <button class="filter-btn" data-level="ADD" onclick="filterLogs('ADD')">Additions</button>
+        <button class="filter-btn" data-level="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
+        <button class="filter-btn" data-level="INFO" onclick="filterLogs('INFO')">Info</button>
+    </div>
+    
+    <div id="logsContainer">
+        <p style="color: #666;">Loading logs...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentFilter = 'ALL';
+    let allLogs = [];
+    let refreshInterval = null;
+    
+    function loadLogs() {
+        fetch('/api/logs?limit=500')
+            .then(response => response.json())
+            .then(logs => {
+                allLogs = logs;
+                displayLogs();
+                updateRefreshStatus();
+            })
+            .catch(err => {
+                document.getElementById('logsContainer').innerHTML = 
+                    '<p style="color: #dc3545;">Failed to load logs: ' + err.message + '</p>';
+            });
+    }
+    
+    function displayLogs() {
+        const container = document.getElementById('logsContainer');
+        
+        let filteredLogs = allLogs;
+        if (currentFilter !== 'ALL') {
+            filteredLogs = allLogs.filter(log => log.level === currentFilter);
+        }
+        
+        if (filteredLogs.length === 0) {
+            container.innerHTML = '<p style="color: #666;">No logs to display.</p>';
+            return;
+        }
+        
+        let html = '';
+        filteredLogs.reverse().forEach(log => {
+            const levelIcon = getLevelIcon(log.level);
+            html += `
+                <div class="log-entry ${log.level}">
+                    <span class="log-timestamp">${new Date(log.timestamp).toLocaleString()}</span>
+                    <span class="log-level">${levelIcon} ${log.level}</span>
+                    <span class="log-message">${escapeHtml(log.message)}</span>
+                    ${log.details ? `<div style="margin-top: 5px; color: #666; font-size: 12px;">${JSON.stringify(log.details)}</div>` : ''}
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    function filterLogs(level) {
+        currentFilter = level;
+        
+        // Update button states
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-level="${level}"]`).classList.add('active');
+        
+        displayLogs();
+    }
+    
+    function getLevelIcon(level) {
+        const icons = {
+            'ERROR': '❌',
+            'WARNING': '⚠️',
+            'SUCCESS': '✓',
+            'ADD': '➕',
+            'UPDATE': '🔄',
+            'INFO': 'ℹ️'
+        };
+        return icons[level] || 'ℹ️';
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    function updateRefreshStatus() {
+        const status = document.getElementById('refreshStatus');
+        status.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    }
+    
+    function toggleAutoRefresh() {
+        const checkbox = document.getElementById('autoRefresh');
+        
+        if (checkbox.checked) {
+            // Start auto-refresh every 10 seconds
+            refreshInterval = setInterval(loadLogs, 10000);
+        } else {
+            // Stop auto-refresh
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+    }
+    
+    // Initialize
+    loadLogs();
+    
+    // Set up auto-refresh
+    document.getElementById('autoRefresh').addEventListener('change', toggleAutoRefresh);
+    refreshInterval = setInterval(loadLogs, 10000);
+</script>
+{% endblock %}

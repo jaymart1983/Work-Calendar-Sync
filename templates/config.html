@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration - ICS to Google Calendar Sync{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Configuration</h2>
+    
+    <form method="POST" action="{{ url_for('config') }}">
+        <div class="form-group">
+            <label for="ics_url">ICS Calendar URL</label>
+            <input type="url" id="ics_url" name="ics_url" 
+                   value="{{ config.ics_url }}" 
+                   placeholder="https://example.com/calendar.ics" 
+                   required>
+            <p class="help-text">Enter the URL of the ICS calendar feed you want to sync from.</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="calendar_id">Google Calendar ID</label>
+            <input type="text" id="calendar_id" name="calendar_id" 
+                   value="{{ config.calendar_id or 'primary' }}" 
+                   placeholder="primary" 
+                   required>
+            <p class="help-text">
+                Enter 'primary' for your main calendar, or the calendar ID (e.g., 'abc123@group.calendar.google.com').
+                You can find calendar IDs in Google Calendar settings.
+            </p>
+        </div>
+        
+        <div class="form-group">
+            <label for="sync_interval">Sync Interval (seconds)</label>
+            <input type="number" id="sync_interval" name="sync_interval" 
+                   value="{{ config.sync_interval or 900 }}" 
+                   min="60" 
+                   step="60"
+                   required>
+            <p class="help-text">
+                How often to sync the calendar (in seconds). Default is 900 seconds (15 minutes).
+                Minimum is 60 seconds (1 minute).
+            </p>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn">Save Configuration</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Setup Instructions</h2>
+    
+    <h3 style="font-size: 16px; margin-bottom: 10px; margin-top: 20px;">1. Get Google Calendar Credentials</h3>
+    <ol style="margin-left: 20px; line-height: 1.8;">
+        <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+        <li>Create a new project or select an existing one</li>
+        <li>Enable the Google Calendar API</li>
+        <li>Create credentials:
+            <ul style="margin-left: 20px; margin-top: 5px;">
+                <li><strong>For Kubernetes:</strong> Create a Service Account and download the JSON key file</li>
+                <li><strong>For local use:</strong> Create an OAuth 2.0 Client ID and download the credentials.json file</li>
+            </ul>
+        </li>
+        <li>Mount the credentials file to <code>/app/secrets/credentials.json</code> in the container</li>
+    </ol>
+    
+    <h3 style="font-size: 16px; margin-bottom: 10px; margin-top: 20px;">2. Find Your ICS Calendar URL</h3>
+    <p>Most calendar applications provide an ICS export URL. Examples:</p>
+    <ul style="margin-left: 20px; line-height: 1.8; margin-top: 10px;">
+        <li><strong>Google Calendar:</strong> Calendar Settings → Integrate Calendar → Secret address in iCalendar format</li>
+        <li><strong>Outlook/Office 365:</strong> Calendar Settings → Shared Calendars → Publish → ICS link</li>
+        <li><strong>Apple Calendar:</strong> Calendar → Publish Calendar</li>
+    </ul>
+    
+    <h3 style="font-size: 16px; margin-bottom: 10px; margin-top: 20px;">3. Service Account Permissions (Kubernetes)</h3>
+    <p>If using a service account, make sure to:</p>
+    <ul style="margin-left: 20px; line-height: 1.8; margin-top: 10px;">
+        <li>Share the target Google Calendar with the service account email</li>
+        <li>Give the service account "Make changes to events" permission</li>
+    </ul>
+</div>
+{% endblock %}

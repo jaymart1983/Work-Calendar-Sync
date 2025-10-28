@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ICS to Google Calendar Sync{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Dashboard</h2>
+    
+    {% if not config.ics_url %}
+    <div class="status warning">
+        ⚠️ No ICS URL configured. Please <a href="{{ url_for('config') }}">configure the sync settings</a> to get started.
+    </div>
+    {% else %}
+    <div class="status success">
+        ✓ Sync is configured and running
+    </div>
+    {% endif %}
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+        <div>
+            <h3 style="font-size: 16px; margin-bottom: 10px;">Current Configuration</h3>
+            <p><strong>ICS URL:</strong><br>{{ config.ics_url or 'Not configured' }}</p>
+            <p style="margin-top: 10px;"><strong>Calendar ID:</strong><br>{{ config.calendar_id or 'primary' }}</p>
+            <p style="margin-top: 10px;"><strong>Sync Interval:</strong><br>{{ config.sync_interval or 900 }} seconds ({{ ((config.sync_interval or 900) / 60) | int }} minutes)</p>
+        </div>
+        
+        <div>
+            <h3 style="font-size: 16px; margin-bottom: 10px;">Actions</h3>
+            <button class="btn" onclick="triggerSync()" id="syncBtn">Trigger Sync Now</button>
+            <p class="help-text" style="margin-top: 10px;">Manually trigger a calendar sync outside the regular schedule.</p>
+            
+            <div id="syncResult" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Recent Activity</h2>
+    <div id="recentLogs">
+        <p style="color: #666;">Loading recent logs...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function loadRecentLogs() {
+        fetch('/api/logs?limit=10')
+            .then(response => response.json())
+            .then(logs => {
+                const container = document.getElementById('recentLogs');
+                if (logs.length === 0) {
+                    container.innerHTML = '<p style="color: #666;">No logs yet.</p>';
+                    return;
+                }
+                
+                let html = '<div style="font-size: 13px;">';
+                logs.reverse().forEach(log => {
+                    const levelClass = log.level === 'ERROR' ? 'error' : 
+                                     log.level === 'WARNING' ? 'warning' : 
+                                     log.level === 'SUCCESS' ? 'success' : '';
+                    const levelIcon = log.level === 'ERROR' ? '❌' : 
+                                    log.level === 'WARNING' ? '⚠️' : 
+                                    log.level === 'SUCCESS' ? '✓' : 
+                                    log.level === 'ADD' ? '➕' :
+                                    log.level === 'UPDATE' ? '🔄' : 'ℹ️';
+                    
+                    html += `<div style="padding: 8px; border-left: 3px solid ${
+                        log.level === 'ERROR' ? '#dc3545' :
+                        log.level === 'WARNING' ? '#ffc107' :
+                        log.level === 'SUCCESS' ? '#28a745' :
+                        log.level === 'ADD' ? '#17a2b8' :
+                        log.level === 'UPDATE' ? '#007bff' : '#6c757d'
+                    }; margin-bottom: 5px; background: #f8f9fa;">
+                        <span style="color: #666;">${new Date(log.timestamp).toLocaleString()}</span>
+                        <strong style="margin-left: 10px;">${levelIcon} ${log.level}</strong>
+                        <span style="margin-left: 10px;">${log.message}</span>
+                    </div>`;
+                });
+                html += '</div>';
+                html += '<p style="margin-top: 15px;"><a href="/logs">View all logs →</a></p>';
+                container.innerHTML = html;
+            })
+            .catch(err => {
+                document.getElementById('recentLogs').innerHTML = 
+                    '<p style="color: #dc3545;">Failed to load logs</p>';
+            });
+    }
+    
+    function triggerSync() {
+        const btn = document.getElementById('syncBtn');
+        const result = document.getElementById('syncResult');
+        
+        btn.disabled = true;
+        btn.textContent = 'Syncing...';
+        result.innerHTML = '<p style="color: #666;">Sync in progress...</p>';
+        
+        fetch('/api/sync/trigger', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    result.innerHTML = `
+                        <div class="status success">
+                            ✓ Sync completed successfully!<br>
+                            Added: ${data.result.added}, Updated: ${data.result.updated}, Errors: ${data.result.errors}
+                        </div>
+                    `;
+                    loadRecentLogs();
+                } else {
+                    result.innerHTML = `
+                        <div class="status error">
+                            ❌ Sync failed: ${data.message}
+                        </div>
+                    `;
+                }
+            })
+            .catch(err => {
+                result.innerHTML = `
+                    <div class="status error">
+                        ❌ Error: ${err.message}
+                    </div>
+                `;
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = 'Trigger Sync Now';
+            });
+    }
+    
+    // Load logs on page load
+    loadRecentLogs();
+    
+    // Refresh logs every 30 seconds
+    setInterval(loadRecentLogs, 30000);
+</script>
+{% endblock %}
