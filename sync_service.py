@@ -267,14 +267,34 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             eventId=existing_events[ical_uid]
                         ).execute()
                         
-                        # Check if event actually changed (compare key fields)
-                        has_changes = (
-                            existing_event.get('summary') != gcal_event.get('summary') or
-                            existing_event.get('description') != gcal_event.get('description') or
-                            existing_event.get('location') != gcal_event.get('location') or
-                            existing_event.get('start') != gcal_event.get('start') or
-                            existing_event.get('end') != gcal_event.get('end')
+                        # Check if event actually changed (compare key fields, normalizing for comparison)
+                        # Compare summary
+                        summary_changed = str(existing_event.get('summary', '')) != str(gcal_event.get('summary', ''))
+                        
+                        # Compare description
+                        desc_changed = str(existing_event.get('description', '')) != str(gcal_event.get('description', ''))
+                        
+                        # Compare location
+                        loc_changed = str(existing_event.get('location', '')) != str(gcal_event.get('location', ''))
+                        
+                        # Compare start/end times (only date or dateTime, ignore timezone differences)
+                        existing_start = existing_event.get('start', {})
+                        new_start = gcal_event.get('start', {})
+                        start_changed = (
+                            existing_start.get('date') != new_start.get('date') or
+                            existing_start.get('dateTime', '').split('+')[0].split('Z')[0] != 
+                            new_start.get('dateTime', '').split('+')[0].split('Z')[0]
                         )
+                        
+                        existing_end = existing_event.get('end', {})
+                        new_end = gcal_event.get('end', {})
+                        end_changed = (
+                            existing_end.get('date') != new_end.get('date') or
+                            existing_end.get('dateTime', '').split('+')[0].split('Z')[0] != 
+                            new_end.get('dateTime', '').split('+')[0].split('Z')[0]
+                        )
+                        
+                        has_changes = summary_changed or desc_changed or loc_changed or start_changed or end_changed
                         
                         event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
                         event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
