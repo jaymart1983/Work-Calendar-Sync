@@ -163,10 +163,18 @@ def convert_ics_event_to_gcal(event):
     if dtstart:
         start_dt = dtstart.dt
         if isinstance(start_dt, datetime):
-            gcal_event['start'] = {
-                'dateTime': start_dt.isoformat(),
-                'timeZone': 'UTC' if start_dt.tzinfo else None
-            }
+            # Preserve timezone info from ICS or use the datetime as-is
+            start_dict = {'dateTime': start_dt.isoformat()}
+            # Only add timeZone if we have timezone info
+            if start_dt.tzinfo:
+                # Get timezone name if available
+                tz_name = str(start_dt.tzinfo)
+                # Google Calendar accepts IANA timezone names or uses the offset in isoformat
+                # Since isoformat includes offset, we can omit timeZone field
+                # or try to get a proper IANA name
+                if hasattr(start_dt.tzinfo, 'zone'):
+                    start_dict['timeZone'] = start_dt.tzinfo.zone
+            gcal_event['start'] = start_dict
         else:
             gcal_event['start'] = {'date': start_dt.isoformat()}
     
@@ -175,10 +183,11 @@ def convert_ics_event_to_gcal(event):
     if dtend:
         end_dt = dtend.dt
         if isinstance(end_dt, datetime):
-            gcal_event['end'] = {
-                'dateTime': end_dt.isoformat(),
-                'timeZone': 'UTC' if end_dt.tzinfo else None
-            }
+            end_dict = {'dateTime': end_dt.isoformat()}
+            if end_dt.tzinfo:
+                if hasattr(end_dt.tzinfo, 'zone'):
+                    end_dict['timeZone'] = end_dt.tzinfo.zone
+            gcal_event['end'] = end_dict
         else:
             gcal_event['end'] = {'date': end_dt.isoformat()}
     
