@@ -277,30 +277,36 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                         # Compare location
                         loc_changed = str(existing_event.get('location', '')) != str(gcal_event.get('location', ''))
                         
-                        # Compare start/end times (only date or dateTime, ignore timezone differences)
+                        # Compare start/end times - need to handle date vs dateTime properly
+                        def normalize_datetime(dt_dict):
+                            """Normalize a datetime dict for comparison."""
+                            if 'date' in dt_dict:
+                                return ('date', dt_dict['date'])
+                            elif 'dateTime' in dt_dict:
+                                # Strip timezone info for comparison
+                                dt_str = dt_dict['dateTime']
+                                # Remove timezone suffix
+                                # Handle formats like: 2025-11-04T00:00:00Z or 2025-11-04T00:00:00+00:00
+                                if 'Z' in dt_str:
+                                    dt_str = dt_str.split('Z')[0]
+                                elif '+' in dt_str:
+                                    dt_str = dt_str.split('+')[0]
+                                elif dt_str.count('-') > 2:  # Has timezone like -05:00
+                                    # Split by T first, then handle time part
+                                    parts = dt_str.split('T')
+                                    if len(parts) == 2 and '-' in parts[1]:
+                                        time_part = parts[1].split('-')[0]
+                                        dt_str = f"{parts[0]}T{time_part}"
+                                return ('dateTime', dt_str)
+                            return (None, None)
+                        
                         existing_start = existing_event.get('start', {})
                         new_start = gcal_event.get('start', {})
-                        
-                        # Debug logging
-                        print(f"DEBUG: Comparing event '{gcal_event['summary']}'")
-                        print(f"  Existing start: {existing_start}")
-                        print(f"  New start: {new_start}")
-                        print(f"  Existing end: {existing_event.get('end', {})}")
-                        print(f"  New end: {gcal_event.get('end', {})}")
-                        
-                        start_changed = (
-                            existing_start.get('date') != new_start.get('date') or
-                            existing_start.get('dateTime', '').split('+')[0].split('Z')[0] != 
-                            new_start.get('dateTime', '').split('+')[0].split('Z')[0]
-                        )
+                        start_changed = normalize_datetime(existing_start) != normalize_datetime(new_start)
                         
                         existing_end = existing_event.get('end', {})
                         new_end = gcal_event.get('end', {})
-                        end_changed = (
-                            existing_end.get('date') != new_end.get('date') or
-                            existing_end.get('dateTime', '').split('+')[0].split('Z')[0] != 
-                            new_end.get('dateTime', '').split('+')[0].split('Z')[0]
-                        )
+                        end_changed = normalize_datetime(existing_end) != normalize_datetime(new_end)
                         
                         has_changes = summary_changed or desc_changed or loc_changed or start_changed or end_changed
                         
