@@ -44,6 +44,9 @@
 
 {% block extra_js %}
 <script>
+    let refreshInterval = 30000; // Default: 30 seconds
+    let refreshTimer = null;
+    
     function loadRecentLogs() {
         fetch('/api/logs?limit=10')
             .then(response => response.json())
@@ -52,6 +55,23 @@
                 if (logs.length === 0) {
                     container.innerHTML = '<p style="color: #666;">No logs yet.</p>';
                     return;
+                }
+                
+                // Check if a sync is happening (recent INFO: Starting sync or ADD/UPDATE logs)
+                const recentLogs = logs.slice(-5);
+                const isSyncing = recentLogs.some(log => 
+                    log.message.includes('Starting sync') || 
+                    log.level === 'ADD' || 
+                    log.level === 'UPDATE' ||
+                    (log.timestamp && (Date.now() - new Date(log.timestamp).getTime() < 5000))
+                );
+                
+                // Adjust refresh rate based on activity
+                const newInterval = isSyncing ? 2000 : 30000; // 2s during sync, 30s idle
+                if (newInterval !== refreshInterval) {
+                    refreshInterval = newInterval;
+                    clearInterval(refreshTimer);
+                    refreshTimer = setInterval(loadRecentLogs, refreshInterval);
                 }
                 
                 let html = '<div style="font-size: 13px;">';
@@ -130,7 +150,7 @@
     // Load logs on page load
     loadRecentLogs();
     
-    // Refresh logs every 30 seconds
-    setInterval(loadRecentLogs, 30000);
+    // Start refresh timer
+    refreshTimer = setInterval(loadRecentLogs, refreshInterval);
 </script>
 {% endblock %}

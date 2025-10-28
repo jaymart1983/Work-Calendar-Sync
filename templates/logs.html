@@ -200,8 +200,8 @@
         const checkbox = document.getElementById('autoRefresh');
         
         if (checkbox.checked) {
-            // Start auto-refresh every 10 seconds
-            refreshInterval = setInterval(loadLogs, 10000);
+            // Start auto-refresh every 2 seconds
+            refreshInterval = setInterval(loadLogs, 2000);
         } else {
             // Stop auto-refresh
             if (refreshInterval) {
@@ -216,6 +216,6 @@
     
     // Set up auto-refresh
     document.getElementById('autoRefresh').addEventListener('change', toggleAutoRefresh);
-    refreshInterval = setInterval(loadLogs, 10000);
+    refreshInterval = setInterval(loadLogs, 2000);
 </script>
 {% endblock %}
