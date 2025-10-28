@@ -11,6 +11,7 @@ import sys
 from datetime import datetime, timezone
 from threading import Thread, Lock
 import requests
+from time import sleep
 from icalendar import Calendar
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -223,6 +224,8 @@ def sync_calendar(ics_url, calendar_id):
                         ).execute()
                         updated += 1
                         log_event('UPDATE', f'Updated event: {gcal_event["summary"]}')
+                        # Rate limit: 1 request per second to avoid API quota
+                        sleep(1.1)
                     else:
                         service.events().insert(
                             calendarId=calendar_id,
@@ -230,10 +233,14 @@ def sync_calendar(ics_url, calendar_id):
                         ).execute()
                         added += 1
                         log_event('ADD', f'Added event: {gcal_event["summary"]}')
+                        # Rate limit: 1 request per second to avoid API quota
+                        sleep(1.1)
                 
                 except Exception as e:
                     errors += 1
                     log_event('ERROR', f'Failed to process event: {e}')
+                    # Back off on errors to avoid hammering the API
+                    sleep(2)
         
         log_event('SUCCESS', 'Sync completed', {
             'added': added,
