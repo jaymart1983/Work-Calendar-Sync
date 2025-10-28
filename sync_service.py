@@ -135,6 +135,21 @@ def fetch_ics_calendar(ics_url):
     response.raise_for_status()
     return Calendar.from_ical(response.content)
 
+def is_event_in_date_range(event, start_date, end_date):
+    """Check if event falls within the given date range."""
+    dtstart = event.get('dtstart')
+    if not dtstart:
+        return False
+    
+    event_start = dtstart.dt
+    # Handle both date and datetime objects
+    if isinstance(event_start, datetime):
+        event_date = event_start.date()
+    else:
+        event_date = event_start
+    
+    return start_date <= event_date <= end_date
+
 def convert_ics_event_to_gcal(event):
     """Convert ICS event to Google Calendar event format."""
     gcal_event = {
@@ -172,9 +187,18 @@ def convert_ics_event_to_gcal(event):
     
     return gcal_event
 
-def sync_calendar(ics_url, calendar_id):
-    """Perform calendar sync."""
-    log_event('INFO', 'Starting sync', {'ics_url': ics_url, 'calendar_id': calendar_id})
+def sync_calendar(ics_url, calendar_id, quick_sync=True):
+    """Perform calendar sync.
+    
+    Args:
+        ics_url: URL to ICS calendar
+        calendar_id: Google Calendar ID
+        quick_sync: If True, only sync events within next 7 days. If False, sync all events.
+    """
+    from datetime import date, timedelta
+    
+    sync_type = 'Quick sync (7 days)' if quick_sync else 'Full sync (all events)'
+    log_event('INFO', f'Starting {sync_type}', {'ics_url': ics_url, 'calendar_id': calendar_id})
     
     try:
         # Fetch ICS
@@ -205,13 +229,24 @@ def sync_calendar(ics_url, calendar_id):
         
         log_event('INFO', f'Found {len(existing_events)} existing events')
         
+        # Set date range for quick sync
+        if quick_sync:
+            today = date.today()
+            end_date = today + timedelta(days=7)
+            log_event('INFO', f'Quick sync: filtering events from {today} to {end_date}')
+        
         # Process events
         added = 0
         updated = 0
         errors = 0
+        skipped = 0
         
         for component in ics_cal.walk():
             if component.name == "VEVENT":
+                # Skip events outside date range in quick sync mode
+                if quick_sync and not is_event_in_date_range(component, today, end_date):
+                    skipped += 1
+                    continue
                 try:
                     gcal_event = convert_ics_event_to_gcal(component)
                     ical_uid = gcal_event.get('iCalUID')
@@ -248,10 +283,14 @@ def sync_calendar(ics_url, calendar_id):
                     # Back off on errors to avoid hammering the API
                     sleep(2)
         
-        log_event('SUCCESS', 'Sync completed', {
+        log_message = f'Sync completed: {added} added, {updated} updated, {errors} errors'
+        if quick_sync:
+            log_message += f', {skipped} skipped (outside 7-day window)'
+        log_event('SUCCESS', log_message, {
             'added': added,
             'updated': updated,
-            'errors': errors
+            'errors': errors,
+            'skipped': skipped if quick_sync else 0
         })
         
         return {'added': added, 'updated': updated, 'errors': errors}
@@ -262,7 +301,12 @@ def sync_calendar(ics_url, calendar_id):
 
 def sync_loop():
     """Main sync loop."""
-    log_event('INFO', 'Sync service started')
+    from datetime import datetime as dt
+    
+    log_event('INFO', 'Sync service started with smart scheduling')
+    log_event('INFO', 'Quick sync (7 days) runs every interval, Full sync at midnight')
+    
+    last_full_sync_day = None
     
     while True:
         try:
@@ -273,7 +317,24 @@ def sync_loop():
                 time.sleep(60)
                 continue
             
-            sync_calendar(config['ics_url'], config.get('calendar_id', 'primary'))
+            # Determine if we should do a full sync (once per day at midnight-ish)
+            current_time = dt.now()
+            current_day = current_time.date()
+            
+            # Do full sync if it's a new day and we haven't done one yet today
+            # and it's past midnight (between 00:00 and 01:00)
+            should_full_sync = (
+                last_full_sync_day != current_day and
+                0 <= current_time.hour < 1
+            )
+            
+            if should_full_sync:
+                log_event('INFO', 'Performing daily full sync')
+                sync_calendar(config['ics_url'], config.get('calendar_id', 'primary'), quick_sync=False)
+                last_full_sync_day = current_day
+            else:
+                # Quick sync - only next 7 days
+                sync_calendar(config['ics_url'], config.get('calendar_id', 'primary'), quick_sync=True)
             
             interval = config.get('sync_interval', 900)
             log_event('INFO', f'Next sync in {interval} seconds')
