@@ -235,10 +235,14 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
             end_date = today + timedelta(days=7)
             log_event('INFO', f'Quick sync: filtering events from {today} to {end_date}')
         
+        # Track which ICS events we've seen
+        ics_event_uids = set()
+        
         # Process events
         added = 0
         updated = 0
         no_change = 0
+        deleted = 0
         errors = 0
         skipped = 0
         
@@ -251,6 +255,10 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                 try:
                     gcal_event = convert_ics_event_to_gcal(component)
                     ical_uid = gcal_event.get('iCalUID')
+                    
+                    # Track this UID as present in ICS feed
+                    if ical_uid:
+                        ics_event_uids.add(ical_uid)
                     
                     if ical_uid and ical_uid in existing_events:
                         # Get existing event to compare
@@ -283,7 +291,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             # Rate limit: 1 request per second to avoid API quota
                             sleep(1.1)
                         else:
-                            # No changes needed
+                            # No changes needed - don't log to reduce noise
                             no_change += 1
                     else:
                         service.events().insert(
@@ -304,18 +312,51 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     # Back off on errors to avoid hammering the API
                     sleep(2)
         
-        log_message = f'Sync completed: {added} added, {updated} updated, {no_change} no change, {errors} errors'
+        # Delete events that exist in Google Calendar but not in ICS feed
+        log_event('INFO', f'Checking for events to delete...')
+        for ical_uid, gcal_event_id in existing_events.items():
+            if ical_uid not in ics_event_uids:
+                try:
+                    # Get event details for logging
+                    event_to_delete = service.events().get(
+                        calendarId=calendar_id,
+                        eventId=gcal_event_id
+                    ).execute()
+                    
+                    event_summary = event_to_delete.get('summary', 'Unknown event')
+                    event_start = event_to_delete.get('start', {})
+                    event_date = event_start.get('date') or event_start.get('dateTime', '')
+                    event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
+                    
+                    # Delete the event
+                    service.events().delete(
+                        calendarId=calendar_id,
+                        eventId=gcal_event_id
+                    ).execute()
+                    
+                    deleted += 1
+                    log_event('DELETE', f'Deleted: {event_summary} ({event_date_str})')
+                    # Rate limit
+                    sleep(1.1)
+                    
+                except Exception as e:
+                    errors += 1
+                    log_event('ERROR', f'Failed to delete event: {e}')
+                    sleep(2)
+        
+        log_message = f'Sync completed: {added} added, {updated} updated, {deleted} deleted, {no_change} no change, {errors} errors'
         if quick_sync:
             log_message += f', {skipped} skipped (outside 7-day window)'
         log_event('SUCCESS', log_message, {
             'added': added,
             'updated': updated,
+            'deleted': deleted,
             'no_change': no_change,
             'errors': errors,
             'skipped': skipped if quick_sync else 0
         })
         
-        return {'added': added, 'updated': updated, 'errors': errors}
+        return {'added': added, 'updated': updated, 'deleted': deleted, 'errors': errors}
     
     except Exception as e:
         log_event('ERROR', f'Sync failed: {e}')

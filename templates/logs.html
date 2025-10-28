@@ -43,6 +43,11 @@
         background: #f8f9fa;
     }
     
+    .log-entry.DELETE {
+        border-left-color: #dc3545;
+        background: #fff5f5;
+    }
+    
     .log-timestamp {
         color: #666;
         margin-right: 10px;
@@ -108,6 +113,7 @@
         <button class="filter-btn" data-level="SUCCESS" onclick="filterLogs('SUCCESS')">Success</button>
         <button class="filter-btn" data-level="ADD" onclick="filterLogs('ADD')">Additions</button>
         <button class="filter-btn" data-level="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
+        <button class="filter-btn" data-level="DELETE" onclick="filterLogs('DELETE')">Deletions</button>
         <button class="filter-btn" data-level="NO_CHANGE" onclick="filterLogs('NO_CHANGE')">No Change</button>
         <button class="filter-btn" data-level="INFO" onclick="filterLogs('INFO')">Info</button>
     </div>
@@ -186,6 +192,7 @@
             'SUCCESS': '✓',
             'ADD': '➕',
             'UPDATE': '🔄',
+            'DELETE': '❎',
             'NO_CHANGE': '➖',
             'INFO': 'ℹ️'
         };
