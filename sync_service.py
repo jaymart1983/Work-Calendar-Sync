@@ -310,10 +310,39 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                         
                         has_changes = summary_changed or desc_changed or loc_changed or start_changed or end_changed
                         
-                        event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
-                        event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
+                        # Determine event type and time info
+                        is_all_day = 'date' in gcal_event.get('start', {})
+                        event_type = 'all-day' if is_all_day else 'timed'
+                        
+                        if is_all_day:
+                            event_date_str = gcal_event.get('start', {}).get('date', 'Unknown date')
+                        else:
+                            datetime_str = gcal_event.get('start', {}).get('dateTime', '')
+                            if datetime_str:
+                                # Extract date and time
+                                event_date_str = datetime_str.split('T')[0] if 'T' in datetime_str else datetime_str
+                                time_part = datetime_str.split('T')[1].split(':')[0:2] if 'T' in datetime_str else []
+                                if time_part:
+                                    event_type = f"{':'.join(time_part)}"
+                            else:
+                                event_date_str = 'Unknown date'
                         
                         if has_changes:
+                            # Build change details
+                            changes = []
+                            if summary_changed:
+                                changes.append('summary')
+                            if desc_changed:
+                                changes.append('description')
+                            if loc_changed:
+                                changes.append('location')
+                            if start_changed:
+                                changes.append(f'start: {normalize_datetime(existing_start)} -> {normalize_datetime(new_start)}')
+                            if end_changed:
+                                changes.append(f'end: {normalize_datetime(existing_end)} -> {normalize_datetime(new_end)}')
+                            
+                            change_detail = ', '.join(changes)
+                            
                             # Update the event
                             service.events().update(
                                 calendarId=calendar_id,
@@ -321,7 +350,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                 body=gcal_event
                             ).execute()
                             updated += 1
-                            log_event('UPDATE', f'Updated: {gcal_event["summary"]} ({event_date_str})')
+                            log_event('UPDATE', f'Updated: {gcal_event["summary"]} ({event_date_str}, {event_type}) - Changed: {change_detail}')
                             # Rate limit: 1 request per second to avoid API quota
                             sleep(1.1)
                         else:
