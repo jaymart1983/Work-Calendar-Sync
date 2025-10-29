@@ -443,6 +443,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     sleep(2)
         
         # Delete events that exist in Google Calendar but not in ICS feed
+        # During quick sync, only delete events within the date range
         log_event('INFO', f'Checking for events to delete...')
         for event_key, gcal_event_id in existing_events.items():
             if event_key not in ics_event_uids:
@@ -457,6 +458,18 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     event_start = event_to_delete.get('start', {})
                     event_date = event_start.get('date') or event_start.get('dateTime', '')
                     event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
+                    
+                    # During quick sync, only delete if event is within date range
+                    if quick_sync:
+                        from dateutil import parser
+                        try:
+                            event_start_date = parser.isoparse(event_date_str).date()
+                            if not (today <= event_start_date <= end_date):
+                                # Event is outside quick sync window, don't delete
+                                continue
+                        except:
+                            # If we can't parse date, skip deletion during quick sync
+                            continue
                     
                     # Delete the event
                     service.events().delete(
