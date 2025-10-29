@@ -154,6 +154,12 @@ def api_sync_schedule():
     else:
         next_full_sync = today_full_sync
     
+    # Make sure times are timezone-aware for consistent JavaScript parsing
+    # Convert to UTC if not already
+    if next_quick_sync.tzinfo is None:
+        import pytz
+        next_quick_sync = pytz.UTC.localize(next_quick_sync)
+    
     return jsonify({
         'next_quick_sync': next_quick_sync.isoformat(),
         'next_full_sync': next_full_sync.isoformat(),
