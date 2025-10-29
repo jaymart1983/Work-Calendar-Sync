@@ -341,6 +341,8 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     start_key = start.get('date') or start.get('dateTime', '')
                     event_key = (ical_uid, start_key)
                     
+                    log_event('INFO', f'ICS event key: UID={ical_uid[:20] if ical_uid else "None"}..., start={start_key[:25] if start_key else "None"}...')
+                    
                     # Track this UID as present in ICS feed (just the UID portion)
                     if ical_uid:
                         ics_event_uids.add(event_key)
@@ -490,13 +492,14 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             if 'already exists' in str(insert_error).lower():
                                 # Treat as no change - event exists and is presumably correct
                                 no_change += 1
+                                log_event('INFO', f'Duplicate error (409) for: {event_summary} at {event_start_str} - marked as no change')
                             else:
                                 # Re-raise other errors
                                 raise
                 
                 except Exception as e:
                     errors += 1
-                    log_event('ERROR', f'Failed to process event: {e}')
+                    log_event('ERROR', f'Failed to process event {event_summary} at {event_start_str}: {str(e)}')
                     # Back off on errors to avoid hammering the API
                     sleep(2)
         
