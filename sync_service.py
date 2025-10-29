@@ -510,14 +510,17 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                 # Try to find it by querying for the specific iCalUID
                                 log_event('INFO', f'Duplicate (409) - searching for existing event: {event_summary} at {event_start_str}')
                                 try:
-                                    # Query by iCalUID
+                                    # Query by iCalUID (include deleted/cancelled events)
                                     if ical_uid:
                                         search_result = service.events().list(
                                             calendarId=calendar_id,
                                             iCalUID=ical_uid,
                                             singleEvents=True,
+                                            showDeleted=True,
                                             maxResults=100
                                         ).execute()
+                                        
+                                        log_event('INFO', f'iCalUID search returned {len(search_result.get("items", []))} events')
                                         
                                         # Find the event with matching start time (normalize to UTC for comparison)
                                         from dateutil import parser
