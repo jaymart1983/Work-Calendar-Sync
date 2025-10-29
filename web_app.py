@@ -92,6 +92,51 @@ def api_trigger_sync():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/api/sync/schedule', methods=['GET'])
+def api_sync_schedule():
+    """Get next sync times."""
+    import pytz
+    from datetime import datetime as dt, timedelta
+    
+    config = sync_service.load_config()
+    sync_interval = config.get('sync_interval', 900)
+    full_sync_hour = config.get('full_sync_hour', 0)
+    full_sync_tz = config.get('full_sync_timezone', 'UTC')
+    
+    # Calculate next quick sync (based on last log entry)
+    logs = sync_service.get_logs(limit=100)
+    last_sync_time = None
+    for log in reversed(logs):
+        if 'Starting' in log.get('message', '') and 'sync' in log.get('message', '').lower():
+            last_sync_time = dt.fromisoformat(log['timestamp'])
+            break
+    
+    if last_sync_time:
+        next_quick_sync = last_sync_time + timedelta(seconds=sync_interval)
+    else:
+        next_quick_sync = dt.now() + timedelta(seconds=sync_interval)
+    
+    # Calculate next full sync
+    try:
+        tz = pytz.timezone(full_sync_tz)
+    except Exception:
+        tz = pytz.UTC
+    
+    now = dt.now(tz)
+    today_full_sync = now.replace(hour=full_sync_hour, minute=0, second=0, microsecond=0)
+    
+    if now >= today_full_sync:
+        # Already passed today, next is tomorrow
+        next_full_sync = today_full_sync + timedelta(days=1)
+    else:
+        next_full_sync = today_full_sync
+    
+    return jsonify({
+        'next_quick_sync': next_quick_sync.isoformat(),
+        'next_full_sync': next_full_sync.isoformat(),
+        'sync_interval': sync_interval
+    })
+
 @app.route('/health')
 def health():
     """Health check endpoint for Kubernetes."""
