@@ -270,7 +270,13 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                 event_summary = event.get('summary', 'No Title')
                 event_start = event.get('start', {})
                 event_start_str = event_start.get('date') or event_start.get('dateTime', 'No start')
-                all_events_for_debug.append(f"{event_summary} at {event_start_str}")
+                event_status = event.get('status', 'confirmed')
+                event_visibility = event.get('visibility', 'default')
+                all_events_for_debug.append(f"{event_summary} at {event_start_str} [status={event_status}, visibility={event_visibility}]")
+                
+                # Skip cancelled events - they shouldn't be matched
+                if event.get('status') == 'cancelled':
+                    continue
                 
                 if 'iCalUID' in event:
                     ical_uid = event['iCalUID']
