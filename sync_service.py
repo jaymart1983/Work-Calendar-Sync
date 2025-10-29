@@ -222,12 +222,26 @@ def _do_sync(ics_url, calendar_id, quick_sync):
         service = get_google_calendar_service()
         log_event('SUCCESS', 'Google Calendar authenticated')
         
+        # Get calendar timezone for proper date range calculation
+        import pytz
+        gcal_info = service.calendars().get(calendarId=calendar_id).execute()
+        cal_tz_name = gcal_info.get('timeZone', 'UTC')
+        try:
+            cal_tz = pytz.timezone(cal_tz_name)
+        except Exception:
+            cal_tz = pytz.UTC
+        
         # Define date range
         if quick_sync:
-            today = date.today()
-            start_date = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
-            end_date = datetime.combine(today + timedelta(days=7), datetime.max.time()).replace(tzinfo=timezone.utc)
-            log_event('INFO', f'Quick sync: filtering events from {today} to {today + timedelta(days=7)}')
+            # Get today in the calendar's timezone
+            now_in_cal_tz = datetime.now(cal_tz)
+            today_in_cal_tz = now_in_cal_tz.date()
+            
+            # Start from midnight today in calendar timezone, convert to UTC for API
+            start_date = cal_tz.localize(datetime.combine(today_in_cal_tz, datetime.min.time())).astimezone(timezone.utc)
+            # End at 23:59:59 on day+7 in calendar timezone, convert to UTC for API
+            end_date = cal_tz.localize(datetime.combine(today_in_cal_tz + timedelta(days=7), datetime.max.time())).astimezone(timezone.utc)
+            log_event('INFO', f'Quick sync: filtering events from {today_in_cal_tz} to {today_in_cal_tz + timedelta(days=7)} ({cal_tz_name})')
         else:
             # For full sync, use a wide range (past 30 days to future 365 days)
             today = date.today()
