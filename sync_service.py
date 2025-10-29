@@ -555,10 +555,14 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                         time_min = (event_dt_utc - timedelta(minutes=1)).isoformat()
                                         time_max = (event_dt_utc + timedelta(minutes=1)).isoformat()
                                     elif 'date' in start:
-                                        # All-day event - search that specific day
+                                        # All-day event - search that specific day (need timezone for API)
                                         event_date = dt_parser.isoparse(start['date'])
-                                        time_min = event_date.isoformat()
-                                        time_max = (event_date + timedelta(days=1)).isoformat()
+                                        # Convert to datetime with UTC timezone for API compatibility
+                                        from datetime import datetime as dt_datetime
+                                        start_dt = dt_datetime.combine(event_date, dt_datetime.min.time()).replace(tzinfo=timezone.utc)
+                                        end_dt = start_dt + timedelta(days=1)
+                                        time_min = start_dt.isoformat()
+                                        time_max = end_dt.isoformat()
                                     else:
                                         # Can't search without time
                                         log_event('WARNING', f'No start time available for duplicate search')
