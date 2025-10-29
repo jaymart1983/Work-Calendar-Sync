@@ -263,7 +263,8 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                 calendarId=calendar_id,
                 pageToken=page_token,
                 maxResults=2500,
-                singleEvents=True  # Expand recurring events into individual instances
+                singleEvents=True,  # Expand recurring events into individual instances
+                showDeleted=True  # Include deleted events so we can restore them if in ICS
             ).execute()
             
             for event in events_result.get('items', []):
@@ -275,9 +276,8 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                 event_visibility = event.get('visibility', 'default')
                 all_events_for_debug.append(f"{event_summary} at {event_start_str} [status={event_status}, visibility={event_visibility}]")
                 
-                # Skip cancelled events - they shouldn't be matched
-                if event.get('status') == 'cancelled':
-                    continue
+                # Include ALL events (even cancelled/deleted) - ICS is source of truth
+                # If event is in ICS but cancelled in Google, we'll restore it via update
                 
                 if 'iCalUID' in event:
                     ical_uid = event['iCalUID']
@@ -372,6 +372,9 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                         # Compare location
                         loc_changed = str(existing_event.get('location', '')) != str(gcal_event.get('location', ''))
                         
+                        # Check if event is cancelled/deleted - if so, it needs to be restored
+                        status_changed = existing_event.get('status') != 'confirmed'
+                        
                         # Compare start/end times - need to handle date vs dateTime properly
                         def normalize_datetime(dt_dict):
                             """Normalize a datetime dict for comparison by converting to UTC."""
@@ -405,7 +408,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                         new_end = gcal_event.get('end', {})
                         end_changed = normalize_datetime(existing_end) != normalize_datetime(new_end)
                         
-                        has_changes = summary_changed or desc_changed or loc_changed or start_changed or end_changed
+                        has_changes = summary_changed or desc_changed or loc_changed or start_changed or end_changed or status_changed
                         
                         # Determine event type and time info
                         is_all_day = 'date' in gcal_event.get('start', {})
@@ -425,8 +428,13 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                 event_date_str = 'Unknown date'
                         
                         if has_changes:
+                            # Ensure status is confirmed (restore cancelled/deleted events)
+                            gcal_event['status'] = 'confirmed'
+                            
                             # Build change details
                             changes = []
+                            if status_changed:
+                                changes.append(f'status: {existing_event.get("status")} -> confirmed (restored)')
                             if summary_changed:
                                 changes.append('summary')
                             if desc_changed:
