@@ -34,8 +34,16 @@ def config():
         config_data = {
             'ics_url': request.form.get('ics_url', ''),
             'calendar_id': request.form.get('calendar_id', 'primary'),
-            'sync_interval': int(request.form.get('sync_interval', 900))
+            'sync_interval': int(request.form.get('sync_interval', 900)),
+            'full_sync_hour': int(request.form.get('full_sync_hour', 0)),
+            'full_sync_timezone': request.form.get('full_sync_timezone', 'UTC')
         }
+        # Preserve existing timezone detection fields
+        existing_config = sync_service.load_config()
+        for key in ['ics_timezone', 'ics_offset', 'gcal_timezone', 'gcal_offset']:
+            if key in existing_config:
+                config_data[key] = existing_config[key]
+        
         sync_service.save_config(config_data)
         return redirect(url_for('index'))
     

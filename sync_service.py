@@ -74,7 +74,9 @@ def load_config():
         return {
             'ics_url': '',
             'calendar_id': 'primary',
-            'sync_interval': 900
+            'sync_interval': 900,
+            'full_sync_hour': 0,  # Hour of day for full sync (0-23)
+            'full_sync_timezone': 'UTC'  # Timezone for full sync scheduling
         }
     
     try:
@@ -502,9 +504,9 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
 def sync_loop():
     """Main sync loop."""
     from datetime import datetime as dt
+    import pytz
     
     log_event('INFO', 'Sync service started with smart scheduling')
-    log_event('INFO', 'Quick sync (7 days) runs every interval, Full sync at midnight')
     
     last_full_sync_day = None
     
@@ -517,15 +519,31 @@ def sync_loop():
                 time.sleep(60)
                 continue
             
-            # Determine if we should do a full sync (once per day at midnight-ish)
-            current_time = dt.now()
+            # Get full sync configuration
+            full_sync_hour = config.get('full_sync_hour', 0)
+            full_sync_tz = config.get('full_sync_timezone', 'UTC')
+            
+            # Log the schedule once at startup
+            if last_full_sync_day is None:
+                log_event('INFO', f'Quick sync (7 days) runs every interval, Full sync at {full_sync_hour:02d}:00 {full_sync_tz}')
+            
+            # Get current time in configured timezone
+            try:
+                tz = pytz.timezone(full_sync_tz)
+                current_time = dt.now(tz)
+            except Exception:
+                # Fallback to UTC if timezone is invalid
+                log_event('WARNING', f'Invalid timezone {full_sync_tz}, using UTC')
+                tz = pytz.UTC
+                current_time = dt.now(tz)
+            
             current_day = current_time.date()
             
             # Do full sync if it's a new day and we haven't done one yet today
-            # and it's past midnight (between 00:00 and 01:00)
+            # and it's within the configured hour window
             should_full_sync = (
                 last_full_sync_day != current_day and
-                0 <= current_time.hour < 1
+                full_sync_hour <= current_time.hour < (full_sync_hour + 1)
             )
             
             if should_full_sync:

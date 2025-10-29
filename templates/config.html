@@ -41,6 +41,29 @@
             </p>
         </div>
         
+        <div class="form-group">
+            <label for="full_sync_hour">Full Sync Hour (0-23)</label>
+            <input type="number" id="full_sync_hour" name="full_sync_hour" 
+                   value="{{ config.full_sync_hour if config.full_sync_hour is defined else 0 }}" 
+                   min="0" 
+                   max="23"
+                   required>
+            <p class="help-text">
+                Hour of day (0-23) when the full sync runs. Default is 0 (midnight). Quick syncs (7 days) run at the regular interval.
+            </p>
+        </div>
+        
+        <div class="form-group">
+            <label for="full_sync_timezone">Full Sync Timezone</label>
+            <input type="text" id="full_sync_timezone" name="full_sync_timezone" 
+                   value="{{ config.full_sync_timezone or 'UTC' }}" 
+                   placeholder="America/Denver" 
+                   required>
+            <p class="help-text">
+                IANA timezone name for full sync scheduling (e.g., 'America/New_York', 'America/Denver', 'UTC'). Default is UTC.
+            </p>
+        </div>
+        
         <div style="display: flex; gap: 10px;">
             <button type="submit" class="btn">Save Configuration</button>
             <a href="{{ url_for('index') }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Cancel</a>
