@@ -244,6 +244,7 @@ def _do_sync(ics_url, calendar_id, quick_sync):
         
         # Get existing Google Calendar events
         existing_events = {}  # key: (iCalUID, UTC_start_time), value: event_id
+        cancelled_events = {}  # key: (iCalUID, UTC_start_time), value: event_id
         page_token = None
         while True:
             events_result = service.events().list(
@@ -262,11 +263,12 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                     start = event.get('start', {})
                     start_key = normalize_start_time_to_utc(start)
                     key = (ical_uid, start_key)
-                    # Only track confirmed events; cancelled/deleted events should be recreated
                     if event.get('status') == 'confirmed':
                         existing_events[key] = event['id']
                     else:
-                        log_event('DEBUG', f'Skipping cancelled/deleted event: {event.get("summary")} at {start_key}')
+                        # Track cancelled events separately so we can restore them
+                        cancelled_events[key] = event['id']
+                        log_event('DEBUG', f'Found cancelled/deleted event: {event.get("summary")} at {start_key}')
             
             page_token = events_result.get('nextPageToken')
             if not page_token:
@@ -320,19 +322,63 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                     else:
                         no_change += 1
                 else:
-                    # New event - add it
-                    service.events().insert(
-                        calendarId=calendar_id,
-                        body=gcal_event
-                    ).execute()
-                    added += 1
-                    log_event('ADD', f'Added: {gcal_event["summary"]} at {start_key}')
-                    sleep(0.5)
+                    # Check if it's a cancelled event that needs restoring
+                    if event_key in cancelled_events:
+                        # Restore the cancelled event
+                        gcal_event['status'] = 'confirmed'
+                        service.events().update(
+                            calendarId=calendar_id,
+                            eventId=cancelled_events[event_key],
+                            body=gcal_event
+                        ).execute()
+                        updated += 1
+                        log_event('UPDATE', f'Restored cancelled event: {gcal_event["summary"]} at {start_key}')
+                        sleep(0.5)
+                    else:
+                        # New event - add it
+                        service.events().insert(
+                            calendarId=calendar_id,
+                            body=gcal_event
+                        ).execute()
+                        added += 1
+                        log_event('ADD', f'Added: {gcal_event["summary"]} at {start_key}')
+                        sleep(0.5)
                     
             except Exception as e:
                 if '409' in str(e) or 'already exists' in str(e).lower():
-                    # Event already exists (race condition), count as no_change
-                    no_change += 1
+                    # Event already exists but we couldn't find it - might be cancelled
+                    # Try to restore it by searching
+                    log_event('WARNING', f'Got 409 for {event_summary} at {start_key}, trying to restore')
+                    try:
+                        # Search by iCalUID and time
+                        search_result = service.events().list(
+                            calendarId=calendar_id,
+                            iCalUID=ical_uid,
+                            singleEvents=True,
+                            showDeleted=True,
+                            timeMin=(dt_parser.isoparse(start.get('dateTime', start.get('date'))) - timedelta(minutes=1)).isoformat(),
+                            timeMax=(dt_parser.isoparse(start.get('dateTime', start.get('date'))) + timedelta(minutes=1)).isoformat(),
+                            maxResults=10
+                        ).execute()
+                        
+                        for evt in search_result.get('items', []):
+                            evt_start_key = normalize_start_time_to_utc(evt.get('start', {}))
+                            if evt_start_key == start_key:
+                                # Found it - restore it
+                                gcal_event['status'] = 'confirmed'
+                                service.events().update(
+                                    calendarId=calendar_id,
+                                    eventId=evt['id'],
+                                    body=gcal_event
+                                ).execute()
+                                updated += 1
+                                log_event('UPDATE', f'Restored 409 event: {event_summary}')
+                                break
+                        else:
+                            no_change += 1
+                    except Exception as search_err:
+                        log_event('WARNING', f'Failed to search for 409 event: {str(search_err)}')
+                        no_change += 1
                 else:
                     errors += 1
                     log_event('ERROR', f'Failed to process event: {str(e)}')
