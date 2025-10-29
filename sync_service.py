@@ -544,13 +544,50 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                 try:
                                     # Query by iCalUID (include deleted/cancelled events)
                                     if ical_uid:
-                                        search_result = service.events().list(
-                                            calendarId=calendar_id,
-                                            iCalUID=ical_uid,
-                                            singleEvents=True,
-                                            showDeleted=True,
-                                            maxResults=100
-                                        ).execute()
+                                        # Add time range filter to narrow down search
+                                        # Get the event's start time and search +/- 1 day window
+                                        from dateutil import parser as dt_parser
+                                        try:
+                                            if 'dateTime' in ics_start_dict:
+                                                event_dt = dt_parser.isoparse(ics_start_dict['dateTime'])
+                                            elif 'date' in ics_start_dict:
+                                                from datetime import date as dt_date
+                                                event_dt = dt_parser.isoparse(ics_start_dict['date'])
+                                            else:
+                                                event_dt = None
+                                            
+                                            if event_dt:
+                                                # Search within +/- 1 day window
+                                                from datetime import timedelta
+                                                time_min = (event_dt - timedelta(days=1)).isoformat()
+                                                time_max = (event_dt + timedelta(days=1)).isoformat()
+                                                search_result = service.events().list(
+                                                    calendarId=calendar_id,
+                                                    iCalUID=ical_uid,
+                                                    singleEvents=True,
+                                                    showDeleted=True,
+                                                    timeMin=time_min,
+                                                    timeMax=time_max,
+                                                    maxResults=100
+                                                ).execute()
+                                            else:
+                                                # Fallback to no time filter
+                                                search_result = service.events().list(
+                                                    calendarId=calendar_id,
+                                                    iCalUID=ical_uid,
+                                                    singleEvents=True,
+                                                    showDeleted=True,
+                                                    maxResults=100
+                                                ).execute()
+                                        except Exception:
+                                            # Fallback to no time filter if parsing fails
+                                            search_result = service.events().list(
+                                                calendarId=calendar_id,
+                                                iCalUID=ical_uid,
+                                                singleEvents=True,
+                                                showDeleted=True,
+                                                maxResults=100
+                                            ).execute()
                                         
                                         log_event('INFO', f'iCalUID search returned {len(search_result.get("items", []))} events')
                                         
