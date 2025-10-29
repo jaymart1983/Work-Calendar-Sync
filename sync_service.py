@@ -285,6 +285,10 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
             today = date.today()
             end_date = today + timedelta(days=7)
             log_event('INFO', f'Quick sync: filtering events from {today} to {end_date}')
+        else:
+            today = None
+            end_date = None
+            log_event('INFO', 'Full sync: processing all events')
         
         # Track which ICS events we've seen
         ics_event_uids = set()
@@ -299,10 +303,24 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         
         for component in ics_cal.walk():
             if component.name == "VEVENT":
+                # Get event summary and start time for logging
+                event_summary = str(component.get('summary', 'No Title'))
+                dtstart = component.get('dtstart')
+                event_start_str = 'Unknown'
+                if dtstart:
+                    start_dt = dtstart.dt
+                    if isinstance(start_dt, datetime):
+                        event_start_str = start_dt.isoformat()
+                    else:
+                        event_start_str = start_dt.isoformat()
+                
                 # Skip events outside date range in quick sync mode
                 if quick_sync and not is_event_in_date_range(component, today, end_date):
                     skipped += 1
+                    log_event('DEBUG', f'Skipped (out of range): {event_summary} at {event_start_str}')
                     continue
+                
+                log_event('DEBUG', f'Processing: {event_summary} at {event_start_str}')
                 try:
                     gcal_event = convert_ics_event_to_gcal(component)
                     ical_uid = gcal_event.get('iCalUID')
