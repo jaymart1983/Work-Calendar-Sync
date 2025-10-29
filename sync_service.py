@@ -547,9 +547,13 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                     
                                     if 'dateTime' in start:
                                         event_dt = dt_parser.isoparse(start['dateTime'])
-                                        # Search +/- 1 minute window to find exact match
-                                        time_min = (event_dt - timedelta(minutes=1)).isoformat()
-                                        time_max = (event_dt + timedelta(minutes=1)).isoformat()
+                                        # Convert to UTC and search +/- 1 minute window
+                                        if event_dt.tzinfo:
+                                            event_dt_utc = event_dt.astimezone(timezone.utc)
+                                        else:
+                                            event_dt_utc = event_dt.replace(tzinfo=timezone.utc)
+                                        time_min = (event_dt_utc - timedelta(minutes=1)).isoformat()
+                                        time_max = (event_dt_utc + timedelta(minutes=1)).isoformat()
                                     elif 'date' in start:
                                         # All-day event - search that specific day
                                         event_date = dt_parser.isoparse(start['date'])
