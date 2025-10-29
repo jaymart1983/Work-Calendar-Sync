@@ -365,13 +365,25 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                     log_event('WARNING', f'Got 409 for {event_summary} at {start_key}, trying to restore')
                     try:
                         # Search by iCalUID and time
+                        # For all-day events, use a wider search window (full day)
+                        if 'date' in start:
+                            # All-day event - search entire day
+                            event_date = dt_parser.isoparse(start['date'])
+                            search_min = event_date.isoformat()
+                            search_max = (event_date + timedelta(days=1)).isoformat()
+                        else:
+                            # Timed event - search ±1 minute window
+                            event_dt = dt_parser.isoparse(start['dateTime'])
+                            search_min = (event_dt - timedelta(minutes=1)).isoformat()
+                            search_max = (event_dt + timedelta(minutes=1)).isoformat()
+                        
                         search_result = service.events().list(
                             calendarId=calendar_id,
                             iCalUID=ical_uid,
                             singleEvents=True,
                             showDeleted=True,
-                            timeMin=(dt_parser.isoparse(start.get('dateTime', start.get('date'))) - timedelta(minutes=1)).isoformat(),
-                            timeMax=(dt_parser.isoparse(start.get('dateTime', start.get('date'))) + timedelta(minutes=1)).isoformat(),
+                            timeMin=search_min,
+                            timeMax=search_max,
                             maxResults=10
                         ).execute()
                         
