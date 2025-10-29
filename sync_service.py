@@ -152,6 +152,36 @@ def is_event_in_date_range(event, start_date, end_date):
     
     return start_date <= event_date <= end_date
 
+def normalize_start_time_to_utc(start_dict):
+    """Normalize a start time dict to UTC string for consistent comparison.
+    
+    Args:
+        start_dict: Dict with 'date' or 'dateTime' key
+    
+    Returns:
+        UTC normalized string for use as comparison key
+    """
+    from dateutil import parser
+    
+    if 'date' in start_dict:
+        # All-day event - return date as-is
+        return start_dict['date']
+    elif 'dateTime' in start_dict:
+        # Timed event - normalize to UTC
+        try:
+            dt = parser.isoparse(start_dict['dateTime'])
+            if dt.tzinfo:
+                dt_utc = dt.astimezone(timezone.utc)
+            else:
+                # Treat naive datetime as UTC
+                dt_utc = dt.replace(tzinfo=timezone.utc)
+            return dt_utc.strftime('%Y-%m-%dT%H:%M:%S')
+        except Exception:
+            # Fallback to original string
+            return start_dict['dateTime']
+    else:
+        return ''
+
 def convert_ics_event_to_gcal(event):
     """Convert ICS event to Google Calendar event format."""
     gcal_event = {
@@ -281,10 +311,10 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                 
                 if 'iCalUID' in event:
                     ical_uid = event['iCalUID']
-                    # Get start time for unique identification
+                    # Get start time for unique identification - normalize to UTC
                     start = event.get('start', {})
-                    start_key = start.get('date') or start.get('dateTime', '')
-                    # Use UID + start time as composite key
+                    start_key = normalize_start_time_to_utc(start)
+                    # Use UID + UTC start time as composite key
                     key = (ical_uid, start_key)
                     existing_events[key] = event['id']
             
@@ -343,9 +373,9 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     gcal_event = convert_ics_event_to_gcal(component)
                     ical_uid = gcal_event.get('iCalUID')
                     
-                    # Get start time for composite key
+                    # Get start time for composite key - normalize to UTC
                     start = gcal_event.get('start', {})
-                    start_key = start.get('date') or start.get('dateTime', '')
+                    start_key = normalize_start_time_to_utc(start)
                     event_key = (ical_uid, start_key)
                     
                     log_event('INFO', f'ICS event key: UID={ical_uid[:20] if ical_uid else "None"}..., start={start_key[:25] if start_key else "None"}...')
@@ -530,35 +560,12 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                         ics_start_dict = start
                                         
                                         # Normalize ICS start time to UTC
-                                        if 'dateTime' in ics_start_dict:
-                                            try:
-                                                ics_dt = parser.isoparse(ics_start_dict['dateTime'])
-                                                if ics_dt.tzinfo:
-                                                    ics_utc = ics_dt.astimezone(timezone.utc)
-                                                else:
-                                                    ics_utc = ics_dt.replace(tzinfo=timezone.utc)
-                                                ics_normalized = ics_utc.strftime('%Y-%m-%dT%H:%M:%S')
-                                            except:
-                                                ics_normalized = ics_start_dict['dateTime']
-                                        else:
-                                            ics_normalized = ics_start_dict.get('date', '')
+                                        ics_normalized = normalize_start_time_to_utc(ics_start_dict)
                                         
                                         for evt in search_result.get('items', []):
                                             evt_start = evt.get('start', {})
-                                            
                                             # Normalize Google event start time to UTC
-                                            if 'dateTime' in evt_start:
-                                                try:
-                                                    evt_dt = parser.isoparse(evt_start['dateTime'])
-                                                    if evt_dt.tzinfo:
-                                                        evt_utc = evt_dt.astimezone(timezone.utc)
-                                                    else:
-                                                        evt_utc = evt_dt.replace(tzinfo=timezone.utc)
-                                                    evt_normalized = evt_utc.strftime('%Y-%m-%dT%H:%M:%S')
-                                                except:
-                                                    evt_normalized = evt_start['dateTime']
-                                            else:
-                                                evt_normalized = evt_start.get('date', '')
+                                            evt_normalized = normalize_start_time_to_utc(evt_start)
                                             
                                             # Compare normalized times
                                             if evt_normalized == ics_normalized:
