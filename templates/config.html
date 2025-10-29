@@ -55,12 +55,61 @@
         
         <div class="form-group">
             <label for="full_sync_timezone">Full Sync Timezone</label>
-            <input type="text" id="full_sync_timezone" name="full_sync_timezone" 
-                   value="{{ config.full_sync_timezone or 'UTC' }}" 
-                   placeholder="America/Denver" 
-                   required>
+            <select id="full_sync_timezone" name="full_sync_timezone" required>
+                {% set current_tz = config.full_sync_timezone or 'UTC' %}
+                <option value="UTC" {% if current_tz == 'UTC' %}selected{% endif %}>UTC</option>
+                <optgroup label="America">
+                    <option value="America/New_York" {% if current_tz == 'America/New_York' %}selected{% endif %}>America/New_York (Eastern)</option>
+                    <option value="America/Chicago" {% if current_tz == 'America/Chicago' %}selected{% endif %}>America/Chicago (Central)</option>
+                    <option value="America/Denver" {% if current_tz == 'America/Denver' %}selected{% endif %}>America/Denver (Mountain)</option>
+                    <option value="America/Phoenix" {% if current_tz == 'America/Phoenix' %}selected{% endif %}>America/Phoenix (MST - no DST)</option>
+                    <option value="America/Los_Angeles" {% if current_tz == 'America/Los_Angeles' %}selected{% endif %}>America/Los_Angeles (Pacific)</option>
+                    <option value="America/Anchorage" {% if current_tz == 'America/Anchorage' %}selected{% endif %}>America/Anchorage (Alaska)</option>
+                    <option value="America/Honolulu" {% if current_tz == 'America/Honolulu' %}selected{% endif %}>America/Honolulu (Hawaii)</option>
+                    <option value="America/Toronto" {% if current_tz == 'America/Toronto' %}selected{% endif %}>America/Toronto</option>
+                    <option value="America/Vancouver" {% if current_tz == 'America/Vancouver' %}selected{% endif %}>America/Vancouver</option>
+                    <option value="America/Mexico_City" {% if current_tz == 'America/Mexico_City' %}selected{% endif %}>America/Mexico_City</option>
+                    <option value="America/Sao_Paulo" {% if current_tz == 'America/Sao_Paulo' %}selected{% endif %}>America/Sao_Paulo</option>
+                    <option value="America/Buenos_Aires" {% if current_tz == 'America/Buenos_Aires' %}selected{% endif %}>America/Buenos_Aires</option>
+                </optgroup>
+                <optgroup label="Europe">
+                    <option value="Europe/London" {% if current_tz == 'Europe/London' %}selected{% endif %}>Europe/London</option>
+                    <option value="Europe/Paris" {% if current_tz == 'Europe/Paris' %}selected{% endif %}>Europe/Paris</option>
+                    <option value="Europe/Berlin" {% if current_tz == 'Europe/Berlin' %}selected{% endif %}>Europe/Berlin</option>
+                    <option value="Europe/Rome" {% if current_tz == 'Europe/Rome' %}selected{% endif %}>Europe/Rome</option>
+                    <option value="Europe/Madrid" {% if current_tz == 'Europe/Madrid' %}selected{% endif %}>Europe/Madrid</option>
+                    <option value="Europe/Amsterdam" {% if current_tz == 'Europe/Amsterdam' %}selected{% endif %}>Europe/Amsterdam</option>
+                    <option value="Europe/Brussels" {% if current_tz == 'Europe/Brussels' %}selected{% endif %}>Europe/Brussels</option>
+                    <option value="Europe/Warsaw" {% if current_tz == 'Europe/Warsaw' %}selected{% endif %}>Europe/Warsaw</option>
+                    <option value="Europe/Moscow" {% if current_tz == 'Europe/Moscow' %}selected{% endif %}>Europe/Moscow</option>
+                </optgroup>
+                <optgroup label="Asia">
+                    <option value="Asia/Dubai" {% if current_tz == 'Asia/Dubai' %}selected{% endif %}>Asia/Dubai</option>
+                    <option value="Asia/Kolkata" {% if current_tz == 'Asia/Kolkata' %}selected{% endif %}>Asia/Kolkata</option>
+                    <option value="Asia/Bangkok" {% if current_tz == 'Asia/Bangkok' %}selected{% endif %}>Asia/Bangkok</option>
+                    <option value="Asia/Singapore" {% if current_tz == 'Asia/Singapore' %}selected{% endif %}>Asia/Singapore</option>
+                    <option value="Asia/Hong_Kong" {% if current_tz == 'Asia/Hong_Kong' %}selected{% endif %}>Asia/Hong_Kong</option>
+                    <option value="Asia/Shanghai" {% if current_tz == 'Asia/Shanghai' %}selected{% endif %}>Asia/Shanghai</option>
+                    <option value="Asia/Tokyo" {% if current_tz == 'Asia/Tokyo' %}selected{% endif %}>Asia/Tokyo</option>
+                    <option value="Asia/Seoul" {% if current_tz == 'Asia/Seoul' %}selected{% endif %}>Asia/Seoul</option>
+                </optgroup>
+                <optgroup label="Pacific">
+                    <option value="Pacific/Auckland" {% if current_tz == 'Pacific/Auckland' %}selected{% endif %}>Pacific/Auckland</option>
+                    <option value="Pacific/Fiji" {% if current_tz == 'Pacific/Fiji' %}selected{% endif %}>Pacific/Fiji</option>
+                </optgroup>
+                <optgroup label="Australia">
+                    <option value="Australia/Sydney" {% if current_tz == 'Australia/Sydney' %}selected{% endif %}>Australia/Sydney</option>
+                    <option value="Australia/Melbourne" {% if current_tz == 'Australia/Melbourne' %}selected{% endif %}>Australia/Melbourne</option>
+                    <option value="Australia/Brisbane" {% if current_tz == 'Australia/Brisbane' %}selected{% endif %}>Australia/Brisbane</option>
+                    <option value="Australia/Perth" {% if current_tz == 'Australia/Perth' %}selected{% endif %}>Australia/Perth</option>
+                </optgroup>
+                <optgroup label="Africa">
+                    <option value="Africa/Cairo" {% if current_tz == 'Africa/Cairo' %}selected{% endif %}>Africa/Cairo</option>
+                    <option value="Africa/Johannesburg" {% if current_tz == 'Africa/Johannesburg' %}selected{% endif %}>Africa/Johannesburg</option>
+                </optgroup>
+            </select>
             <p class="help-text">
-                IANA timezone name for full sync scheduling (e.g., 'America/New_York', 'America/Denver', 'UTC'). Default is UTC.
+                Timezone for full sync scheduling. Default is UTC.
             </p>
         </div>
         
