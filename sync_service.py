@@ -96,8 +96,26 @@ def format_time(dt_utc, tz_name):
     except:
         return dt_utc.strftime('%Y-%m-%d %H:%M:%S UTC')
 
-def delete_all(service, calendar_id, start, end, tz_name):
-    deleted = 0
+def get_event_key(summary, start_dt, end_dt):
+    """Create unique key for event matching using summary + start + end times."""
+    # Normalize to UTC for consistent comparison
+    if isinstance(start_dt, datetime):
+        start_utc = start_dt.astimezone(timezone.utc) if start_dt.tzinfo else start_dt.replace(tzinfo=timezone.utc)
+        start_str = start_utc.strftime('%Y-%m-%d %H:%M')
+    else:
+        start_str = start_dt.isoformat()
+    
+    if isinstance(end_dt, datetime):
+        end_utc = end_dt.astimezone(timezone.utc) if end_dt.tzinfo else end_dt.replace(tzinfo=timezone.utc)
+        end_str = end_utc.strftime('%Y-%m-%d %H:%M')
+    else:
+        end_str = end_dt.isoformat()
+    
+    return f"{summary}|{start_str}|{end_str}"
+
+def get_gcal_events(service, calendar_id, start, end):
+    """Fetch all Google Calendar events and create lookup by key."""
+    events = {}
     page_token = None
     
     while True:
@@ -107,83 +125,103 @@ def delete_all(service, calendar_id, start, end, tz_name):
         ).execute()
         
         for event in result.get('items', []):
-            try:
-                service.events().delete(calendarId=calendar_id, eventId=event['id']).execute()
-                deleted += 1
-                
-                # Format time for logging
-                s = event.get('start', {})
-                if 'dateTime' in s:
-                    dt = dt_parser.isoparse(s['dateTime']).astimezone(timezone.utc)
-                    time_str = format_time(dt, tz_name)
-                elif 'date' in s:
-                    time_str = s['date']
-                else:
-                    time_str = 'unknown'
-                
-                log('DELETE', f"{event.get('summary', 'No Title')} at {time_str}")
-                time.sleep(0.2)
-            except Exception as e:
-                if '410' not in str(e):
-                    log('ERROR', f"Delete failed: {str(e)}")
+            summary = event.get('summary', 'No Title')
+            
+            # Parse start
+            s = event.get('start', {})
+            if 'dateTime' in s:
+                start_dt = dt_parser.isoparse(s['dateTime'])
+            elif 'date' in s:
+                start_dt = dt_parser.isoparse(s['date']).date()
+            else:
+                continue
+            
+            # Parse end
+            e = event.get('end', {})
+            if 'dateTime' in e:
+                end_dt = dt_parser.isoparse(e['dateTime'])
+            elif 'date' in e:
+                end_dt = dt_parser.isoparse(e['date']).date()
+            else:
+                end_dt = start_dt
+            
+            key = get_event_key(summary, start_dt, end_dt)
+            events[key] = {'id': event['id'], 'summary': summary, 'start': start_dt, 'end': end_dt}
         
         page_token = result.get('nextPageToken')
         if not page_token:
             break
     
-    return deleted
+    return events
 
-def add_all(service, calendar_id, ics_cal, start, end, tz_name):
-    added = 0
-    events = list(recurring_ical_events.of(ics_cal).between(start, end))
+def get_ics_events(ics_cal, start, end):
+    """Get all ICS events and create lookup by key."""
+    events = {}
+    expanded = list(recurring_ical_events.of(ics_cal).between(start, end))
     
-    for component in events:
+    for component in expanded:
         summary = str(component.get('summary', 'No Title'))
         
-        gcal_event = {
-            'summary': summary,
-            'description': str(component.get('description', '')),
-            'location': str(component.get('location', ''))
-        }
-        
-        # Don't set iCalUID to avoid 409 duplicate errors
-        # Google Calendar will generate its own unique ID
-        
-        # Start time
+        # Parse start
         dtstart = component.get('dtstart')
-        if dtstart:
-            start_dt = dtstart.dt
-            if isinstance(start_dt, datetime):
-                gcal_event['start'] = {'dateTime': start_dt.isoformat()}
-                if hasattr(start_dt.tzinfo, 'zone'):
-                    gcal_event['start']['timeZone'] = start_dt.tzinfo.zone
-                time_str = format_time(start_dt.astimezone(timezone.utc) if start_dt.tzinfo else start_dt.replace(tzinfo=timezone.utc), tz_name)
-            else:
-                gcal_event['start'] = {'date': start_dt.isoformat()}
-                time_str = start_dt.isoformat()
-        else:
-            time_str = 'unknown'
+        if not dtstart:
+            continue
+        start_dt = dtstart.dt
         
-        # End time
+        # Parse end
         dtend = component.get('dtend')
-        if dtend:
-            end_dt = dtend.dt
-            if isinstance(end_dt, datetime):
-                gcal_event['end'] = {'dateTime': end_dt.isoformat()}
-                if hasattr(end_dt.tzinfo, 'zone'):
-                    gcal_event['end']['timeZone'] = end_dt.tzinfo.zone
-            else:
-                gcal_event['end'] = {'date': end_dt.isoformat()}
+        end_dt = dtend.dt if dtend else start_dt
         
-        try:
-            service.events().insert(calendarId=calendar_id, body=gcal_event).execute()
-            added += 1
-            log('ADD', f"{summary} at {time_str}")
-            time.sleep(0.2)
-        except Exception as e:
-            log('ERROR', f"Add failed for {summary}: {str(e)}")
+        key = get_event_key(summary, start_dt, end_dt)
+        events[key] = {'summary': summary, 'start_dt': start_dt, 'end_dt': end_dt, 'component': component}
     
-    return added
+    return events
+
+def add_event(service, calendar_id, ics_event, tz_name):
+    """Add a single ICS event to Google Calendar."""
+    component = ics_event['component']
+    summary = ics_event['summary']
+    start_dt = ics_event['start_dt']
+    end_dt = ics_event['end_dt']
+    
+    gcal_event = {
+        'summary': summary,
+        'description': str(component.get('description', '')),
+        'location': str(component.get('location', ''))
+    }
+    
+    # Start time
+    if isinstance(start_dt, datetime):
+        gcal_event['start'] = {'dateTime': start_dt.isoformat()}
+        if hasattr(start_dt.tzinfo, 'zone'):
+            gcal_event['start']['timeZone'] = start_dt.tzinfo.zone
+        time_str = format_time(start_dt.astimezone(timezone.utc) if start_dt.tzinfo else start_dt.replace(tzinfo=timezone.utc), tz_name)
+    else:
+        gcal_event['start'] = {'date': start_dt.isoformat()}
+        time_str = start_dt.isoformat()
+    
+    # End time
+    if isinstance(end_dt, datetime):
+        gcal_event['end'] = {'dateTime': end_dt.isoformat()}
+        if hasattr(end_dt.tzinfo, 'zone'):
+            gcal_event['end']['timeZone'] = end_dt.tzinfo.zone
+    else:
+        gcal_event['end'] = {'date': end_dt.isoformat()}
+    
+    service.events().insert(calendarId=calendar_id, body=gcal_event).execute()
+    log('ADD', f"{summary} at {time_str}")
+
+def delete_event(service, calendar_id, gcal_event, tz_name):
+    """Delete a single Google Calendar event."""
+    service.events().delete(calendarId=calendar_id, eventId=gcal_event['id']).execute()
+    
+    start_dt = gcal_event['start']
+    if isinstance(start_dt, datetime):
+        time_str = format_time(start_dt.astimezone(timezone.utc) if start_dt.tzinfo else start_dt.replace(tzinfo=timezone.utc), tz_name)
+    else:
+        time_str = start_dt.isoformat()
+    
+    log('DELETE', f"{gcal_event['summary']} at {time_str}")
 
 def sync_calendar(ics_url, calendar_id, quick_sync=True):
     global sync_in_progress
@@ -221,12 +259,48 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         
         log('INFO', f"Range: {start.date()} to {end.date()} ({tz_name})")
         
-        # Delete all, then add all
-        deleted = delete_all(service, calendar_id, start, end, tz_name)
-        added = add_all(service, calendar_id, ics_cal, start, end, tz_name)
+        # Get events from both sources
+        log('INFO', 'Fetching Google Calendar events...')
+        gcal_events = get_gcal_events(service, calendar_id, start, end)
+        log('INFO', f'Found {len(gcal_events)} Google Calendar events')
         
-        log('SUCCESS', f"Done: {added} added, {deleted} deleted")
-        return {'added': added, 'deleted': deleted}
+        log('INFO', 'Fetching ICS events...')
+        ics_events = get_ics_events(ics_cal, start, end)
+        log('INFO', f'Found {len(ics_events)} ICS events')
+        
+        # Compare and find differences
+        gcal_keys = set(gcal_events.keys())
+        ics_keys = set(ics_events.keys())
+        
+        to_delete = gcal_keys - ics_keys  # In Google but not in ICS
+        to_add = ics_keys - gcal_keys     # In ICS but not in Google
+        unchanged = gcal_keys & ics_keys   # In both
+        
+        log('INFO', f'To delete: {len(to_delete)}, To add: {len(to_add)}, Unchanged: {len(unchanged)}')
+        
+        # Delete events no longer in ICS
+        deleted = 0
+        for key in to_delete:
+            try:
+                delete_event(service, calendar_id, gcal_events[key], tz_name)
+                deleted += 1
+                time.sleep(0.2)
+            except Exception as e:
+                if '410' not in str(e):
+                    log('ERROR', f"Delete failed: {str(e)}")
+        
+        # Add new events from ICS
+        added = 0
+        for key in to_add:
+            try:
+                add_event(service, calendar_id, ics_events[key], tz_name)
+                added += 1
+                time.sleep(0.2)
+            except Exception as e:
+                log('ERROR', f"Add failed: {str(e)}")
+        
+        log('SUCCESS', f"Done: {added} added, {deleted} deleted, {len(unchanged)} unchanged")
+        return {'added': added, 'deleted': deleted, 'unchanged': len(unchanged)}
         
     except Exception as e:
         log('ERROR', f"Sync failed: {e}")
