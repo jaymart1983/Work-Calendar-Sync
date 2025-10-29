@@ -108,17 +108,17 @@
     
     <div class="filters">
         <div style="margin-bottom: 10px;">
-            <strong>Level Filters:</strong>
+            <strong>Level Filters:</strong> <span style="font-size: 12px; color: #666;">(click multiple to combine)</span>
         </div>
-        <button class="filter-btn active" data-level="ALL" onclick="filterLogs('ALL')">All</button>
-        <button class="filter-btn" data-level="ERROR" onclick="filterLogs('ERROR')">Errors</button>
-        <button class="filter-btn" data-level="WARNING" onclick="filterLogs('WARNING')">Warnings</button>
-        <button class="filter-btn" data-level="SUCCESS" onclick="filterLogs('SUCCESS')">Success</button>
-        <button class="filter-btn" data-level="ADD" onclick="filterLogs('ADD')">Additions</button>
-        <button class="filter-btn" data-level="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
-        <button class="filter-btn" data-level="DELETE" onclick="filterLogs('DELETE')">Deletions</button>
-        <button class="filter-btn" data-level="INFO" onclick="filterLogs('INFO')">Info</button>
-        <button class="filter-btn" data-level="DEBUG" onclick="filterLogs('DEBUG')">Debug</button>
+        <button class="filter-btn active" data-level="ALL" onclick="toggleFilter('ALL')">All</button>
+        <button class="filter-btn" data-level="ERROR" onclick="toggleFilter('ERROR')">Errors</button>
+        <button class="filter-btn" data-level="WARNING" onclick="toggleFilter('WARNING')">Warnings</button>
+        <button class="filter-btn" data-level="SUCCESS" onclick="toggleFilter('SUCCESS')">Success</button>
+        <button class="filter-btn" data-level="ADD" onclick="toggleFilter('ADD')">Additions</button>
+        <button class="filter-btn" data-level="UPDATE" onclick="toggleFilter('UPDATE')">Updates</button>
+        <button class="filter-btn" data-level="DELETE" onclick="toggleFilter('DELETE')">Deletions</button>
+        <button class="filter-btn" data-level="INFO" onclick="toggleFilter('INFO')">Info</button>
+        <button class="filter-btn" data-level="DEBUG" onclick="toggleFilter('DEBUG')">Debug</button>
     </div>
     
     <div class="filters">
@@ -141,7 +141,7 @@
 
 {% block extra_js %}
 <script>
-    let currentFilter = 'ALL';
+    let activeFilters = new Set(['ALL']);
     let allLogs = [];
     let refreshInterval = null;
     
@@ -166,9 +166,9 @@
         
         let filteredLogs = allLogs;
         
-        // Apply level filter
-        if (currentFilter !== 'ALL') {
-            filteredLogs = filteredLogs.filter(log => log.level === currentFilter);
+        // Apply level filters
+        if (!activeFilters.has('ALL')) {
+            filteredLogs = filteredLogs.filter(log => activeFilters.has(log.level));
         }
         
         // Apply content filters
@@ -219,14 +219,37 @@
         container.innerHTML = html;
     }
     
-    function filterLogs(level) {
-        currentFilter = level;
+    function toggleFilter(level) {
+        if (level === 'ALL') {
+            // Clear all filters and set to ALL
+            activeFilters.clear();
+            activeFilters.add('ALL');
+        } else {
+            // Remove ALL if it's active
+            activeFilters.delete('ALL');
+            
+            // Toggle the clicked filter
+            if (activeFilters.has(level)) {
+                activeFilters.delete(level);
+            } else {
+                activeFilters.add(level);
+            }
+            
+            // If no filters selected, default to ALL
+            if (activeFilters.size === 0) {
+                activeFilters.add('ALL');
+            }
+        }
         
         // Update button states
         document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.classList.remove('active');
+            const btnLevel = btn.getAttribute('data-level');
+            if (activeFilters.has(btnLevel)) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
         });
-        document.querySelector(`[data-level="${level}"]`).classList.add('active');
         
         displayLogs();
     }
