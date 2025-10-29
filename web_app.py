@@ -103,28 +103,39 @@ def api_sync_schedule():
     full_sync_hour = config.get('full_sync_hour', 0)
     full_sync_tz = config.get('full_sync_timezone', 'UTC')
     
-    # Calculate next quick sync (based on last log entry)
-    logs = sync_service.get_logs(limit=100)
-    last_sync_time = None
+    # Calculate next quick sync
+    logs = sync_service.get_logs(limit=200)
     
-    # Look for "Next sync in" message which is more accurate
+    # Find the most recent "Next sync in" or sync completion message
+    last_sync_end_time = None
+    service_start_time = None
+    
     for log in reversed(logs):
         msg = log.get('message', '')
-        if 'Next sync in' in msg:
-            last_sync_time = dt.fromisoformat(log['timestamp'])
-            break
-        elif 'Starting' in msg and 'sync' in msg.lower():
-            last_sync_time = dt.fromisoformat(log['timestamp'])
+        timestamp = dt.fromisoformat(log['timestamp'])
+        
+        # Service start is a good indicator
+        if 'Sync service started' in msg:
+            service_start_time = timestamp
+        
+        # Next sync message is most accurate
+        if 'Next sync in' in msg and last_sync_end_time is None:
+            last_sync_end_time = timestamp
             break
     
-    if last_sync_time:
-        # Calculate when the next sync should be based on when last one finished
-        next_quick_sync = last_sync_time + timedelta(seconds=sync_interval)
-        # If calculated time is in the past, assume it's running now or about to run
-        if next_quick_sync < dt.now():
-            next_quick_sync = dt.now() + timedelta(seconds=10)
+    # Calculate next sync
+    if last_sync_end_time:
+        next_quick_sync = last_sync_end_time + timedelta(seconds=sync_interval)
+    elif service_start_time:
+        # Service just started, assume sync happens soon
+        next_quick_sync = service_start_time + timedelta(seconds=min(sync_interval, 60))
     else:
+        # No info available, estimate
         next_quick_sync = dt.now() + timedelta(seconds=sync_interval)
+    
+    # If calculated time is in the past, reset to now + small delay
+    if next_quick_sync < dt.now():
+        next_quick_sync = dt.now() + timedelta(seconds=5)
     
     # Calculate next full sync
     try:
