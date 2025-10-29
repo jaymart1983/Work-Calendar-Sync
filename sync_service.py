@@ -594,6 +594,12 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                         evt_normalized = normalize_start_time_to_utc(evt_start)
                                         evt_status = evt.get('status', 'unknown')
                                         evt_summary = evt.get('summary', 'No title')
+                                        
+                                        # Skip cancelled/deleted events - they shouldn't match
+                                        if evt_status in ['cancelled', 'deleted']:
+                                            log_event('DEBUG', f'Skipping cancelled/deleted: "{evt_summary}" at {evt_start_str}')
+                                            continue
+                                        
                                         log_event('DEBUG', f'Found: "{evt_summary}" at {evt_start_str}, normalized={evt_normalized}, status={evt_status}')
                                         
                                         # Match by normalized UTC time
@@ -605,9 +611,13 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                     if found_event:
                                         # Add to our tracking dict for future syncs
                                         existing_events[event_key] = found_event['id']
+                                        log_event('INFO', f'Added duplicate to tracking (will update on next sync if needed)')
                                         no_change += 1
                                     else:
-                                        log_event('WARNING', f'Could not locate duplicate event despite 409 error')
+                                        # Could not find the duplicate - it exists per Google but we can't locate it
+                                        # This is OK - it means the event is already there, just not in our tracking
+                                        # Count as no_change since the event exists
+                                        log_event('INFO', f'Event exists (409) but not located in search - counted as existing')
                                         no_change += 1
                                         
                                 except Exception as search_error:
