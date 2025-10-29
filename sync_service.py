@@ -561,11 +561,15 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                         
                                         # Normalize ICS start time to UTC
                                         ics_normalized = normalize_start_time_to_utc(ics_start_dict)
+                                        log_event('DEBUG', f'ICS normalized time: {ics_normalized}')
                                         
                                         for evt in search_result.get('items', []):
                                             evt_start = evt.get('start', {})
+                                            evt_start_str = evt_start.get('date') or evt_start.get('dateTime', 'unknown')
                                             # Normalize Google event start time to UTC
                                             evt_normalized = normalize_start_time_to_utc(evt_start)
+                                            evt_status = evt.get('status', 'unknown')
+                                            log_event('DEBUG', f'Google event: start={evt_start_str}, normalized={evt_normalized}, status={evt_status}')
                                             
                                             # Compare normalized times
                                             if evt_normalized == ics_normalized:
