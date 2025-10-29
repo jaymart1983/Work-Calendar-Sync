@@ -173,19 +173,12 @@ def health():
 
 @app.route('/api/version')
 def api_version():
-    """Get application version (git commit hash)."""
-    import subprocess
+    """Get application version from VERSION file."""
     try:
-        # Try to get git commit hash
-        result = subprocess.run(
-            ['git', 'rev-parse', '--short', 'HEAD'],
-            capture_output=True,
-            text=True,
-            cwd=os.path.dirname(__file__),
-            timeout=2
-        )
-        if result.returncode == 0:
-            version = result.stdout.strip()
+        version_file = os.path.join(os.path.dirname(__file__), 'VERSION')
+        if os.path.exists(version_file):
+            with open(version_file, 'r') as f:
+                version = f.read().strip()
         else:
             version = 'unknown'
     except Exception:
