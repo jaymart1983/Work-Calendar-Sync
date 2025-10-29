@@ -519,14 +519,44 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                             maxResults=100
                                         ).execute()
                                         
-                                        # Find the event with matching start time
+                                        # Find the event with matching start time (normalize to UTC for comparison)
+                                        from dateutil import parser
                                         found_event = None
-                                        ics_start_key = start.get('date') or start.get('dateTime', '')
+                                        ics_start_dict = start
+                                        
+                                        # Normalize ICS start time to UTC
+                                        if 'dateTime' in ics_start_dict:
+                                            try:
+                                                ics_dt = parser.isoparse(ics_start_dict['dateTime'])
+                                                if ics_dt.tzinfo:
+                                                    ics_utc = ics_dt.astimezone(timezone.utc)
+                                                else:
+                                                    ics_utc = ics_dt.replace(tzinfo=timezone.utc)
+                                                ics_normalized = ics_utc.strftime('%Y-%m-%dT%H:%M:%S')
+                                            except:
+                                                ics_normalized = ics_start_dict['dateTime']
+                                        else:
+                                            ics_normalized = ics_start_dict.get('date', '')
+                                        
                                         for evt in search_result.get('items', []):
                                             evt_start = evt.get('start', {})
-                                            evt_start_key = evt_start.get('date') or evt_start.get('dateTime', '')
-                                            # Compare datetime strings directly
-                                            if evt_start_key == ics_start_key:
+                                            
+                                            # Normalize Google event start time to UTC
+                                            if 'dateTime' in evt_start:
+                                                try:
+                                                    evt_dt = parser.isoparse(evt_start['dateTime'])
+                                                    if evt_dt.tzinfo:
+                                                        evt_utc = evt_dt.astimezone(timezone.utc)
+                                                    else:
+                                                        evt_utc = evt_dt.replace(tzinfo=timezone.utc)
+                                                    evt_normalized = evt_utc.strftime('%Y-%m-%dT%H:%M:%S')
+                                                except:
+                                                    evt_normalized = evt_start['dateTime']
+                                            else:
+                                                evt_normalized = evt_start.get('date', '')
+                                            
+                                            # Compare normalized times
+                                            if evt_normalized == ics_normalized:
                                                 found_event = evt
                                                 break
                                         
@@ -594,8 +624,13 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     sleep(1.1)
                     
                 except Exception as e:
-                    errors += 1
-                    log_event('ERROR', f'Failed to delete event: {e}')
+                    # Ignore 410 errors - event already deleted
+                    if '410' in str(e) or 'deleted' in str(e).lower():
+                        # Event already deleted, just skip it
+                        pass
+                    else:
+                        errors += 1
+                        log_event('ERROR', f'Failed to delete event: {e}')
                     sleep(2)
         
         log_message = f'Sync completed: {added} added, {updated} updated, {deleted} deleted, {no_change} no change, {errors} errors'
