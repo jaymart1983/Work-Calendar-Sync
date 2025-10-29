@@ -107,6 +107,9 @@
     </div>
     
     <div class="filters">
+        <div style="margin-bottom: 10px;">
+            <strong>Level Filters:</strong>
+        </div>
         <button class="filter-btn active" data-level="ALL" onclick="filterLogs('ALL')">All</button>
         <button class="filter-btn" data-level="ERROR" onclick="filterLogs('ERROR')">Errors</button>
         <button class="filter-btn" data-level="WARNING" onclick="filterLogs('WARNING')">Warnings</button>
@@ -114,8 +117,20 @@
         <button class="filter-btn" data-level="ADD" onclick="filterLogs('ADD')">Additions</button>
         <button class="filter-btn" data-level="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
         <button class="filter-btn" data-level="DELETE" onclick="filterLogs('DELETE')">Deletions</button>
-        <button class="filter-btn" data-level="NO_CHANGE" onclick="filterLogs('NO_CHANGE')">No Change</button>
         <button class="filter-btn" data-level="INFO" onclick="filterLogs('INFO')">Info</button>
+        <button class="filter-btn" data-level="DEBUG" onclick="filterLogs('DEBUG')">Debug</button>
+    </div>
+    
+    <div class="filters">
+        <div style="margin-bottom: 10px;">
+            <strong>Content Filters:</strong>
+        </div>
+        <label style="display: flex; align-items: center; gap: 5px;">
+            <input type="checkbox" id="hideSkipped" onchange="displayLogs()"> Hide Skipped Events
+        </label>
+        <label style="display: flex; align-items: center; gap: 5px;">
+            <input type="checkbox" id="only7Days" onchange="displayLogs()"> Only 7-Day Window Events
+        </label>
     </div>
     
     <div id="logsContainer">
@@ -146,10 +161,41 @@
     
     function displayLogs() {
         const container = document.getElementById('logsContainer');
+        const hideSkipped = document.getElementById('hideSkipped')?.checked || false;
+        const only7Days = document.getElementById('only7Days')?.checked || false;
         
         let filteredLogs = allLogs;
+        
+        // Apply level filter
         if (currentFilter !== 'ALL') {
-            filteredLogs = allLogs.filter(log => log.level === currentFilter);
+            filteredLogs = filteredLogs.filter(log => log.level === currentFilter);
+        }
+        
+        // Apply content filters
+        if (hideSkipped) {
+            filteredLogs = filteredLogs.filter(log => 
+                !log.message.includes('Skipped (out of range)')
+            );
+        }
+        
+        if (only7Days) {
+            filteredLogs = filteredLogs.filter(log => {
+                // Include events that are being processed (not skipped)
+                // Or include summary/status messages
+                return log.message.includes('Processing:') || 
+                       log.message.includes('No change:') ||
+                       log.message.includes('Found existing match') ||
+                       log.message.includes('No existing match') ||
+                       log.message.includes('will add') ||
+                       log.message.includes('Added:') ||
+                       log.message.includes('Updated:') ||
+                       log.message.includes('Deleted:') ||
+                       log.message.includes('Duplicate error') ||
+                       log.level === 'SUCCESS' ||
+                       log.level === 'ERROR' ||
+                       log.level === 'WARNING' ||
+                       (log.message.includes('Quick sync') && log.message.includes('7 days'));
+            });
         }
         
         if (filteredLogs.length === 0) {
