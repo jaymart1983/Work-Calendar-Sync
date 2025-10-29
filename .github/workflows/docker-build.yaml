@@ -46,6 +46,13 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable=true
 
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      
+      - name: Update version file
+        run: echo "${{ steps.sha.outputs.short }}" > static/version.txt
+      
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
