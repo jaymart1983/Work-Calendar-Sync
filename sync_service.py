@@ -231,14 +231,15 @@ def build_gcal_event_table(service, calendar_id, start_date, end_date):
             pageToken=page_token,
             maxResults=2500,
             singleEvents=True,
-            showDeleted=False,  # Only get active events
+            showDeleted=True,  # Get ALL events including cancelled/deleted
             timeMin=start_date.isoformat(),
             timeMax=end_date.isoformat()
         ).execute()
         
         for event in events_result.get('items', []):
-            if 'iCalUID' not in event or event.get('status') != 'confirmed':
+            if 'iCalUID' not in event:
                 continue
+            # Include ALL events regardless of status
             
             uid = event['iCalUID']
             summary = event.get('summary', 'No Title')
