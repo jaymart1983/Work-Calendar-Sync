@@ -256,6 +256,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         
         # Get existing events - use UID + start time as key for recurring events
         existing_events = {}  # key: (iCalUID, start_time_str), value: event_id
+        all_events_for_debug = []  # Store for debugging
         page_token = None
         while True:
             events_result = service.events().list(
@@ -265,6 +266,12 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
             ).execute()
             
             for event in events_result.get('items', []):
+                # Store for debugging
+                event_summary = event.get('summary', 'No Title')
+                event_start = event.get('start', {})
+                event_start_str = event_start.get('date') or event_start.get('dateTime', 'No start')
+                all_events_for_debug.append(f"{event_summary} at {event_start_str}")
+                
                 if 'iCalUID' in event:
                     ical_uid = event['iCalUID']
                     # Get start time for unique identification
@@ -279,6 +286,10 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                 break
         
         log_event('INFO', f'Found {len(existing_events)} existing event instances')
+        # Log first 20 events for debugging
+        if all_events_for_debug:
+            for i, evt in enumerate(all_events_for_debug[:20]):
+                log_event('INFO', f'Existing event {i+1}: {evt}')
         
         # Set date range for quick sync
         if quick_sync:
@@ -336,6 +347,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     
                     if event_key in existing_events:
                         # Get existing event to compare
+                        log_event('INFO', f'Found existing match for: {event_summary} at {event_start_str}')
                         existing_event = service.events().get(
                             calendarId=calendar_id,
                             eventId=existing_events[event_key]
@@ -446,6 +458,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             no_change += 1
                             log_event('INFO', f'No change: {gcal_event["summary"]} ({event_date_str}, {event_type})')
                     else:
+                        log_event('INFO', f'No existing match - will add: {event_summary} at {event_start_str}')
                         try:
                             # Insert with retry logic
                             retry_count = 0
