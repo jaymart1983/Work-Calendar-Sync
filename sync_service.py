@@ -401,32 +401,58 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             
                             change_detail = ', '.join(changes)
                             
-                            # Update the event
-                            service.events().update(
-                                calendarId=calendar_id,
-                                eventId=existing_events[event_key],
-                                body=gcal_event
-                            ).execute()
+                            # Update the event with retry logic
+                            retry_count = 0
+                            while retry_count < 3:
+                                try:
+                                    service.events().update(
+                                        calendarId=calendar_id,
+                                        eventId=existing_events[event_key],
+                                        body=gcal_event
+                                    ).execute()
+                                    break
+                                except Exception as update_error:
+                                    if 'rate' in str(update_error).lower() or '429' in str(update_error):
+                                        retry_count += 1
+                                        wait_time = 5 * (2 ** retry_count)  # Exponential backoff
+                                        log_event('WARNING', f'Rate limit hit, waiting {wait_time}s before retry {retry_count}/3')
+                                        sleep(wait_time)
+                                    else:
+                                        raise
                             updated += 1
                             log_event('UPDATE', f'Updated: {gcal_event["summary"]} ({event_date_str}, {event_type}) - Changed: {change_detail}')
-                            # Rate limit: 1 request per second to avoid API quota
-                            sleep(1.1)
+                            # Rate limit: 2 seconds between requests
+                            sleep(2.0)
                         else:
                             # No changes needed - don't log to reduce noise
                             no_change += 1
                     else:
                         try:
-                            service.events().insert(
-                                calendarId=calendar_id,
-                                body=gcal_event
-                            ).execute()
+                            # Insert with retry logic
+                            retry_count = 0
+                            while retry_count < 3:
+                                try:
+                                    service.events().insert(
+                                        calendarId=calendar_id,
+                                        body=gcal_event
+                                    ).execute()
+                                    break
+                                except Exception as api_error:
+                                    if 'rate' in str(api_error).lower() or '429' in str(api_error):
+                                        retry_count += 1
+                                        wait_time = 5 * (2 ** retry_count)  # Exponential backoff
+                                        log_event('WARNING', f'Rate limit hit, waiting {wait_time}s before retry {retry_count}/3')
+                                        sleep(wait_time)
+                                    else:
+                                        raise
+                            
                             added += 1
                             # Get event date for logging
                             event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
                             event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
                             log_event('ADD', f'Added: {gcal_event["summary"]} ({event_date_str})')
-                            # Rate limit: 1 request per second to avoid API quota
-                            sleep(1.1)
+                            # Rate limit: 2 seconds between requests
+                            sleep(2.0)
                         except Exception as insert_error:
                             # Handle 409 duplicate error - event already exists but wasn't in our lookup
                             if 'already exists' in str(insert_error).lower():
