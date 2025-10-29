@@ -478,13 +478,15 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                         log_event('INFO', f'No existing match - will add: {event_summary} at {event_start_str}')
                         try:
                             # Insert with retry logic
+                            log_event('INFO', f'Attempting INSERT for: {event_summary}')
                             retry_count = 0
                             while retry_count < 3:
                                 try:
-                                    service.events().insert(
+                                    result = service.events().insert(
                                         calendarId=calendar_id,
                                         body=gcal_event
                                     ).execute()
+                                    log_event('INFO', f'INSERT succeeded for: {event_summary}, result ID: {result.get("id", "unknown")}')
                                     break
                                 except Exception as api_error:
                                     if 'rate' in str(api_error).lower() or '429' in str(api_error):
