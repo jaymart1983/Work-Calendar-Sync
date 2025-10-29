@@ -262,7 +262,8 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
             events_result = service.events().list(
                 calendarId=calendar_id,
                 pageToken=page_token,
-                maxResults=2500
+                maxResults=2500,
+                singleEvents=True  # Expand recurring events into individual instances
             ).execute()
             
             for event in events_result.get('items', []):
