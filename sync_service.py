@@ -262,7 +262,11 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                     start = event.get('start', {})
                     start_key = normalize_start_time_to_utc(start)
                     key = (ical_uid, start_key)
-                    existing_events[key] = event['id']
+                    # Only track confirmed events; cancelled/deleted events should be recreated
+                    if event.get('status') == 'confirmed':
+                        existing_events[key] = event['id']
+                    else:
+                        log_event('DEBUG', f'Skipping cancelled/deleted event: {event.get("summary")} at {start_key}')
             
             page_token = events_result.get('nextPageToken')
             if not page_token:
@@ -286,6 +290,9 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                 start_key = normalize_start_time_to_utc(start)
                 event_key = (ical_uid, start_key)
                 ics_event_keys.add(event_key)
+                
+                event_summary = gcal_event.get('summary', 'No Title')
+                log_event('DEBUG', f'Processing: {event_summary} at {start_key}, key in existing: {event_key in existing_events}')
                 
                 if event_key in existing_events:
                     # Event exists - check if update needed
