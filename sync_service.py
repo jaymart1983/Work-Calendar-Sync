@@ -254,8 +254,8 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
             except Exception:
                 pass
         
-        # Get existing events
-        existing_events = {}
+        # Get existing events - use UID + start time as key for recurring events
+        existing_events = {}  # key: (iCalUID, start_time_str), value: event_id
         page_token = None
         while True:
             events_result = service.events().list(
@@ -266,13 +266,19 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
             
             for event in events_result.get('items', []):
                 if 'iCalUID' in event:
-                    existing_events[event['iCalUID']] = event['id']
+                    ical_uid = event['iCalUID']
+                    # Get start time for unique identification
+                    start = event.get('start', {})
+                    start_key = start.get('date') or start.get('dateTime', '')
+                    # Use UID + start time as composite key
+                    key = (ical_uid, start_key)
+                    existing_events[key] = event['id']
             
             page_token = events_result.get('nextPageToken')
             if not page_token:
                 break
         
-        log_event('INFO', f'Found {len(existing_events)} existing events')
+        log_event('INFO', f'Found {len(existing_events)} existing event instances')
         
         # Set date range for quick sync
         if quick_sync:
@@ -301,15 +307,20 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                     gcal_event = convert_ics_event_to_gcal(component)
                     ical_uid = gcal_event.get('iCalUID')
                     
-                    # Track this UID as present in ICS feed
-                    if ical_uid:
-                        ics_event_uids.add(ical_uid)
+                    # Get start time for composite key
+                    start = gcal_event.get('start', {})
+                    start_key = start.get('date') or start.get('dateTime', '')
+                    event_key = (ical_uid, start_key)
                     
-                    if ical_uid and ical_uid in existing_events:
+                    # Track this UID as present in ICS feed (just the UID portion)
+                    if ical_uid:
+                        ics_event_uids.add(event_key)
+                    
+                    if event_key in existing_events:
                         # Get existing event to compare
                         existing_event = service.events().get(
                             calendarId=calendar_id,
-                            eventId=existing_events[ical_uid]
+                            eventId=existing_events[event_key]
                         ).execute()
                         
                         # Check if event actually changed (compare key fields, normalizing for comparison)
@@ -393,7 +404,7 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             # Update the event
                             service.events().update(
                                 calendarId=calendar_id,
-                                eventId=existing_events[ical_uid],
+                                eventId=existing_events[event_key],
                                 body=gcal_event
                             ).execute()
                             updated += 1
@@ -433,8 +444,8 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         
         # Delete events that exist in Google Calendar but not in ICS feed
         log_event('INFO', f'Checking for events to delete...')
-        for ical_uid, gcal_event_id in existing_events.items():
-            if ical_uid not in ics_event_uids:
+        for event_key, gcal_event_id in existing_events.items():
+            if event_key not in ics_event_uids:
                 try:
                     # Get event details for logging
                     event_to_delete = service.events().get(
