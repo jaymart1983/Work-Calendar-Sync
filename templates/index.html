@@ -84,6 +84,8 @@
                     refreshInterval = newInterval;
                     clearInterval(refreshTimer);
                     refreshTimer = setInterval(loadRecentLogs, refreshInterval);
+                    // Also refresh sync schedule when sync activity changes
+                    loadSyncSchedule();
                 }
                 
                 let html = '<div style="font-size: 13px;">';
@@ -223,7 +225,7 @@
     // Update countdowns every second
     setInterval(updateCountdowns, 1000);
     
-    // Refresh schedule every 30 seconds
-    setInterval(loadSyncSchedule, 30000);
+    // Refresh schedule every 5 seconds
+    setInterval(loadSyncSchedule, 5000);
 </script>
 {% endblock %}
