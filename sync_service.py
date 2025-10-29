@@ -156,6 +156,10 @@ def get_gcal_events(service, calendar_id, start, end):
 
 def get_ics_events(ics_cal, start, end):
     """Get all ICS events and create lookup by key."""
+    # Log raw component count before expansion
+    raw_components = [c for c in ics_cal.walk() if c.name == 'VEVENT']
+    log('DEBUG', f'Raw ICS has {len(raw_components)} VEVENT components before expansion')
+    
     events = {}
     expanded = list(recurring_ical_events.of(ics_cal).between(start, end))
     
