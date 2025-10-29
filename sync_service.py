@@ -496,10 +496,45 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             sleep(2.0)
                         except Exception as insert_error:
                             # Handle 409 duplicate error - event already exists but wasn't in our lookup
-                            if 'already exists' in str(insert_error).lower():
-                                # Treat as no change - event exists and is presumably correct
-                                no_change += 1
-                                log_event('INFO', f'Duplicate error (409) for: {event_summary} at {event_start_str} - marked as no change')
+                            if 'already exists' in str(insert_error).lower() or '409' in str(insert_error):
+                                # Event exists but wasn't found in our initial query
+                                # This can happen with recurring events that share iCalUIDs
+                                # Try to find it by querying for the specific iCalUID
+                                log_event('INFO', f'Duplicate (409) - searching for existing event: {event_summary} at {event_start_str}')
+                                try:
+                                    # Query by iCalUID
+                                    if ical_uid:
+                                        search_result = service.events().list(
+                                            calendarId=calendar_id,
+                                            iCalUID=ical_uid,
+                                            singleEvents=True,
+                                            maxResults=100
+                                        ).execute()
+                                        
+                                        # Find the event with matching start time
+                                        found_event = None
+                                        ics_start_key = start.get('date') or start.get('dateTime', '')
+                                        for evt in search_result.get('items', []):
+                                            evt_start = evt.get('start', {})
+                                            evt_start_key = evt_start.get('date') or evt_start.get('dateTime', '')
+                                            # Compare datetime strings directly
+                                            if evt_start_key == ics_start_key:
+                                                found_event = evt
+                                                break
+                                        
+                                        if found_event:
+                                            log_event('INFO', f'Found duplicate via iCalUID search - adding to tracking')
+                                            # Add to our tracking dict for future syncs
+                                            existing_events[event_key] = found_event['id']
+                                            no_change += 1
+                                        else:
+                                            log_event('WARNING', f'Could not locate duplicate event despite 409 error')
+                                            no_change += 1
+                                    else:
+                                        no_change += 1
+                                except Exception as search_error:
+                                    log_event('WARNING', f'Failed to search for duplicate: {str(search_error)}')
+                                    no_change += 1
                             else:
                                 # Re-raise other errors
                                 raise
