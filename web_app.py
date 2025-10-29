@@ -173,14 +173,20 @@ def health():
 
 @app.route('/api/version')
 def api_version():
-    """Get application version from VERSION file."""
+    """Get application version from static/version.txt (fallback to VERSION)."""
     try:
-        version_file = os.path.join(os.path.dirname(__file__), 'VERSION')
-        if os.path.exists(version_file):
-            with open(version_file, 'r') as f:
+        base_dir = os.path.dirname(__file__)
+        static_version = os.path.join(base_dir, 'static', 'version.txt')
+        if os.path.exists(static_version):
+            with open(static_version, 'r') as f:
                 version = f.read().strip()
         else:
-            version = 'unknown'
+            version_file = os.path.join(base_dir, 'VERSION')
+            if os.path.exists(version_file):
+                with open(version_file, 'r') as f:
+                    version = f.read().strip()
+            else:
+                version = 'unknown'
     except Exception:
         version = 'unknown'
     
