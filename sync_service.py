@@ -146,8 +146,8 @@ def add_all(service, calendar_id, ics_cal, start, end, tz_name):
             'location': str(component.get('location', ''))
         }
         
-        if component.get('uid'):
-            gcal_event['iCalUID'] = str(component.get('uid'))
+        # Don't set iCalUID to avoid 409 duplicate errors
+        # Google Calendar will generate its own unique ID
         
         # Start time
         dtstart = component.get('dtstart')
