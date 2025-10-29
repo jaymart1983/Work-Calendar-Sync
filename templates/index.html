@@ -227,5 +227,20 @@
     
     // Refresh schedule every 5 seconds
     setInterval(loadSyncSchedule, 5000);
+    
+    // Load and display version
+    fetch('/api/version')
+        .then(response => response.json())
+        .then(data => {
+            // Add version to page footer if not already there
+            if (!document.getElementById('appVersion')) {
+                const versionDiv = document.createElement('div');
+                versionDiv.id = 'appVersion';
+                versionDiv.style.cssText = 'position: fixed; bottom: 10px; right: 10px; font-size: 11px; color: #999; font-family: monospace;';
+                versionDiv.textContent = `v${data.version}`;
+                document.body.appendChild(versionDiv);
+            }
+        })
+        .catch(err => console.error('Failed to load version:', err));
 </script>
 {% endblock %}

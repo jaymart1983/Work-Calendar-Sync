@@ -171,6 +171,28 @@ def health():
     """Health check endpoint for Kubernetes."""
     return jsonify({'status': 'healthy'})
 
+@app.route('/api/version')
+def api_version():
+    """Get application version (git commit hash)."""
+    import subprocess
+    try:
+        # Try to get git commit hash
+        result = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(__file__),
+            timeout=2
+        )
+        if result.returncode == 0:
+            version = result.stdout.strip()
+        else:
+            version = 'unknown'
+    except Exception:
+        version = 'unknown'
+    
+    return jsonify({'version': version})
+
 if __name__ == '__main__':
     # Create data directory if it doesn't exist
     base_dir = os.environ.get('APP_BASE_DIR', '/app')
