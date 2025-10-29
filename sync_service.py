@@ -402,17 +402,26 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             # No changes needed - don't log to reduce noise
                             no_change += 1
                     else:
-                        service.events().insert(
-                            calendarId=calendar_id,
-                            body=gcal_event
-                        ).execute()
-                        added += 1
-                        # Get event date for logging
-                        event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
-                        event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
-                        log_event('ADD', f'Added: {gcal_event["summary"]} ({event_date_str})')
-                        # Rate limit: 1 request per second to avoid API quota
-                        sleep(1.1)
+                        try:
+                            service.events().insert(
+                                calendarId=calendar_id,
+                                body=gcal_event
+                            ).execute()
+                            added += 1
+                            # Get event date for logging
+                            event_date = gcal_event.get('start', {}).get('date') or gcal_event.get('start', {}).get('dateTime', '')
+                            event_date_str = event_date.split('T')[0] if event_date else 'Unknown date'
+                            log_event('ADD', f'Added: {gcal_event["summary"]} ({event_date_str})')
+                            # Rate limit: 1 request per second to avoid API quota
+                            sleep(1.1)
+                        except Exception as insert_error:
+                            # Handle 409 duplicate error - event already exists but wasn't in our lookup
+                            if 'already exists' in str(insert_error).lower():
+                                # Treat as no change - event exists and is presumably correct
+                                no_change += 1
+                            else:
+                                # Re-raise other errors
+                                raise
                 
                 except Exception as e:
                     errors += 1
