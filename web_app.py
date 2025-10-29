@@ -106,13 +106,23 @@ def api_sync_schedule():
     # Calculate next quick sync (based on last log entry)
     logs = sync_service.get_logs(limit=100)
     last_sync_time = None
+    
+    # Look for "Next sync in" message which is more accurate
     for log in reversed(logs):
-        if 'Starting' in log.get('message', '') and 'sync' in log.get('message', '').lower():
+        msg = log.get('message', '')
+        if 'Next sync in' in msg:
+            last_sync_time = dt.fromisoformat(log['timestamp'])
+            break
+        elif 'Starting' in msg and 'sync' in msg.lower():
             last_sync_time = dt.fromisoformat(log['timestamp'])
             break
     
     if last_sync_time:
+        # Calculate when the next sync should be based on when last one finished
         next_quick_sync = last_sync_time + timedelta(seconds=sync_interval)
+        # If calculated time is in the past, assume it's running now or about to run
+        if next_quick_sync < dt.now():
+            next_quick_sync = dt.now() + timedelta(seconds=10)
     else:
         next_quick_sync = dt.now() + timedelta(seconds=sync_interval)
     
