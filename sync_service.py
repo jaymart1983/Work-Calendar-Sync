@@ -257,8 +257,7 @@ def _do_sync(ics_url, calendar_id, quick_sync):
         ics_events = list(recurring_ical_events.of(ics_cal).between(start_date, end_date))
         
         # Get existing Google Calendar events
-        existing_events = {}  # key: (iCalUID, UTC_start_time), value: event_id
-        cancelled_events = {}  # key: (iCalUID, UTC_start_time), value: event_id
+        existing_events = {}  # key: (iCalUID, UTC_start_time), value: {'id': event_id, 'status': status}
         page_token = None
         while True:
             events_result = service.events().list(
@@ -277,18 +276,17 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                     start = event.get('start', {})
                     start_key = normalize_start_time_to_utc(start)
                     key = (ical_uid, start_key)
-                    if event.get('status') == 'confirmed':
-                        existing_events[key] = event['id']
-                    else:
-                        # Track cancelled events separately so we can restore them
-                        cancelled_events[key] = event['id']
+                    status = event.get('status', 'unknown')
+                    existing_events[key] = {'id': event['id'], 'status': status}
+                    if status != 'confirmed':
                         log_event('DEBUG', f'Found cancelled/deleted event: {event.get("summary")} at {start_key}')
             
             page_token = events_result.get('nextPageToken')
             if not page_token:
                 break
         
-        log_event('INFO', f'Found {len(existing_events)} existing Google Calendar event instances')
+        confirmed_count = sum(1 for v in existing_events.values() if v['status'] == 'confirmed')
+        log_event('INFO', f'Found {len(existing_events)} existing Google Calendar event instances ({confirmed_count} confirmed)')
         
         # Track ICS events
         ics_event_keys = set()
@@ -308,55 +306,53 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                 ics_event_keys.add(event_key)
                 
                 event_summary = gcal_event.get('summary', 'No Title')
-                log_event('DEBUG', f'Processing: {event_summary} at {start_key}, key in existing: {event_key in existing_events}')
+                existing_info = existing_events.get(event_key)
+                log_event('DEBUG', f'Processing: {event_summary} at {start_key}, exists: {existing_info is not None}, status: {existing_info["status"] if existing_info else "N/A"}')
                 
-                if event_key in existing_events:
-                    # Event exists - check if update needed
-                    existing_event = service.events().get(
-                        calendarId=calendar_id,
-                        eventId=existing_events[event_key]
-                    ).execute()
-                    
-                    # Simple comparison - update if status is cancelled or summary changed
-                    needs_update = (
-                        existing_event.get('status') != 'confirmed' or
-                        existing_event.get('summary') != gcal_event.get('summary')
-                    )
-                    
-                    if needs_update:
+                if existing_info:
+                    # Event exists - check status and if update needed
+                    if existing_info['status'] == 'cancelled':
+                        # Restore cancelled event
                         gcal_event['status'] = 'confirmed'
                         service.events().update(
                             calendarId=calendar_id,
-                            eventId=existing_events[event_key],
-                            body=gcal_event
-                        ).execute()
-                        updated += 1
-                        log_event('UPDATE', f'Updated: {gcal_event["summary"]}')
-                        sleep(0.5)
-                    else:
-                        no_change += 1
-                else:
-                    # Check if it's a cancelled event that needs restoring
-                    if event_key in cancelled_events:
-                        # Restore the cancelled event
-                        gcal_event['status'] = 'confirmed'
-                        service.events().update(
-                            calendarId=calendar_id,
-                            eventId=cancelled_events[event_key],
+                            eventId=existing_info['id'],
                             body=gcal_event
                         ).execute()
                         updated += 1
                         log_event('UPDATE', f'Restored cancelled event: {gcal_event["summary"]} at {start_key}')
                         sleep(0.5)
                     else:
-                        # New event - add it
-                        service.events().insert(
+                        # Event is confirmed - check if update needed
+                        existing_event = service.events().get(
                             calendarId=calendar_id,
-                            body=gcal_event
+                            eventId=existing_info['id']
                         ).execute()
-                        added += 1
-                        log_event('ADD', f'Added: {gcal_event["summary"]} at {start_key}')
-                        sleep(0.5)
+                        
+                        # Simple comparison - update if summary changed
+                        needs_update = existing_event.get('summary') != gcal_event.get('summary')
+                        
+                        if needs_update:
+                            gcal_event['status'] = 'confirmed'
+                            service.events().update(
+                                calendarId=calendar_id,
+                                eventId=existing_info['id'],
+                                body=gcal_event
+                            ).execute()
+                            updated += 1
+                            log_event('UPDATE', f'Updated: {gcal_event["summary"]}')
+                            sleep(0.5)
+                        else:
+                            no_change += 1
+                else:
+                    # New event - add it
+                    service.events().insert(
+                        calendarId=calendar_id,
+                        body=gcal_event
+                    ).execute()
+                    added += 1
+                    log_event('ADD', f'Added: {gcal_event["summary"]} at {start_key}')
+                    sleep(0.5)
                     
             except Exception as e:
                 if '409' in str(e) or 'already exists' in str(e).lower():
@@ -410,14 +406,14 @@ def _do_sync(ics_url, calendar_id, quick_sync):
                     log_event('ERROR', f'Failed to process event: {str(e)}')
                 sleep(0.5)
         
-        # Delete events in Google Calendar that aren't in ICS
+        # Delete confirmed events in Google Calendar that aren't in ICS
         deleted = 0
-        for event_key, gcal_event_id in existing_events.items():
-            if event_key not in ics_event_keys:
+        for event_key, event_info in existing_events.items():
+            if event_key not in ics_event_keys and event_info['status'] == 'confirmed':
                 try:
                     service.events().delete(
                         calendarId=calendar_id,
-                        eventId=gcal_event_id
+                        eventId=event_info['id']
                     ).execute()
                     deleted += 1
                     log_event('DELETE', f'Deleted event: {event_key[0]}')
