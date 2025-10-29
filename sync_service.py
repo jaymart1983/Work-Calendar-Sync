@@ -557,10 +557,11 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                                                 event_dt = None
                                             
                                             if event_dt:
-                                                # Search within +/- 1 day window
+                                                # Search within +/- 7 days window (wider for recurring events)
                                                 from datetime import timedelta
-                                                time_min = (event_dt - timedelta(days=1)).isoformat()
-                                                time_max = (event_dt + timedelta(days=1)).isoformat()
+                                                time_min = (event_dt - timedelta(days=7)).isoformat()
+                                                time_max = (event_dt + timedelta(days=7)).isoformat()
+                                                log_event('DEBUG', f'Searching iCalUID={ical_uid[:20]}... timeMin={time_min}, timeMax={time_max}')
                                                 search_result = service.events().list(
                                                     calendarId=calendar_id,
                                                     iCalUID=ical_uid,
