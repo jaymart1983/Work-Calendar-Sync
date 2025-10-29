@@ -442,8 +442,9 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             # Rate limit: 2 seconds between requests
                             sleep(2.0)
                         else:
-                            # No changes needed - don't log to reduce noise
+                            # No changes needed - log at INFO level to track
                             no_change += 1
+                            log_event('INFO', f'No change: {gcal_event["summary"]} ({event_date_str}, {event_type})')
                     else:
                         try:
                             # Insert with retry logic
