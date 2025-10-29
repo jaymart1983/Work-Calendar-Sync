@@ -538,92 +538,70 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                             # Handle 409 duplicate error - event already exists but wasn't in our lookup
                             if 'already exists' in str(insert_error).lower() or '409' in str(insert_error):
                                 # Event exists but wasn't found in our initial query
-                                # This can happen with recurring events that share iCalUIDs
-                                # Try to find it by querying for the specific iCalUID
-                                log_event('INFO', f'Duplicate (409) - searching for existing event: {event_summary} at {event_start_str}')
+                                # Search for ANY event at this specific UTC time (ignore iCalUID)
+                                log_event('INFO', f'Duplicate (409) - searching for event at time: {event_start_str}')
                                 try:
-                                    # Query by iCalUID (include deleted/cancelled events)
-                                    if ical_uid:
-                                        # Add time range filter to narrow down search
-                                        # Get the event's start time and search +/- 1 day window
-                                        from dateutil import parser as dt_parser
-                                        try:
-                                            if 'dateTime' in ics_start_dict:
-                                                event_dt = dt_parser.isoparse(ics_start_dict['dateTime'])
-                                            elif 'date' in ics_start_dict:
-                                                from datetime import date as dt_date
-                                                event_dt = dt_parser.isoparse(ics_start_dict['date'])
-                                            else:
-                                                event_dt = None
-                                            
-                                            if event_dt:
-                                                # Search within +/- 7 days window (wider for recurring events)
-                                                from datetime import timedelta
-                                                time_min = (event_dt - timedelta(days=7)).isoformat()
-                                                time_max = (event_dt + timedelta(days=7)).isoformat()
-                                                log_event('DEBUG', f'Searching iCalUID={ical_uid[:20]}... timeMin={time_min}, timeMax={time_max}')
-                                                search_result = service.events().list(
-                                                    calendarId=calendar_id,
-                                                    iCalUID=ical_uid,
-                                                    singleEvents=True,
-                                                    showDeleted=True,
-                                                    timeMin=time_min,
-                                                    timeMax=time_max,
-                                                    maxResults=100
-                                                ).execute()
-                                            else:
-                                                # Fallback to no time filter
-                                                search_result = service.events().list(
-                                                    calendarId=calendar_id,
-                                                    iCalUID=ical_uid,
-                                                    singleEvents=True,
-                                                    showDeleted=True,
-                                                    maxResults=100
-                                                ).execute()
-                                        except Exception:
-                                            # Fallback to no time filter if parsing fails
-                                            search_result = service.events().list(
-                                                calendarId=calendar_id,
-                                                iCalUID=ical_uid,
-                                                singleEvents=True,
-                                                showDeleted=True,
-                                                maxResults=100
-                                            ).execute()
-                                        
-                                        log_event('INFO', f'iCalUID search returned {len(search_result.get("items", []))} events')
-                                        
-                                        # Find the event with matching start time (normalize to UTC for comparison)
-                                        from dateutil import parser
-                                        found_event = None
-                                        ics_start_dict = start
-                                        
-                                        # Normalize ICS start time to UTC
-                                        ics_normalized = normalize_start_time_to_utc(ics_start_dict)
-                                        log_event('DEBUG', f'ICS normalized time: {ics_normalized}')
-                                        
-                                        for evt in search_result.get('items', []):
-                                            evt_start = evt.get('start', {})
-                                            evt_start_str = evt_start.get('date') or evt_start.get('dateTime', 'unknown')
-                                            # Normalize Google event start time to UTC
-                                            evt_normalized = normalize_start_time_to_utc(evt_start)
-                                            evt_status = evt.get('status', 'unknown')
-                                            log_event('DEBUG', f'Google event: start={evt_start_str}, normalized={evt_normalized}, status={evt_status}')
-                                            
-                                            # Compare normalized times
-                                            if evt_normalized == ics_normalized:
-                                                found_event = evt
-                                                break
-                                        
-                                        if found_event:
-                                            log_event('INFO', f'Found duplicate via iCalUID search - adding to tracking')
-                                            # Add to our tracking dict for future syncs
-                                            existing_events[event_key] = found_event['id']
-                                            no_change += 1
-                                        else:
-                                            log_event('WARNING', f'Could not locate duplicate event despite 409 error')
-                                            no_change += 1
+                                    # Get the event's start time and search in a narrow window
+                                    from dateutil import parser as dt_parser
+                                    from datetime import timedelta
+                                    
+                                    if 'dateTime' in start:
+                                        event_dt = dt_parser.isoparse(start['dateTime'])
+                                        # Search +/- 1 minute window to find exact match
+                                        time_min = (event_dt - timedelta(minutes=1)).isoformat()
+                                        time_max = (event_dt + timedelta(minutes=1)).isoformat()
+                                    elif 'date' in start:
+                                        # All-day event - search that specific day
+                                        event_date = dt_parser.isoparse(start['date'])
+                                        time_min = event_date.isoformat()
+                                        time_max = (event_date + timedelta(days=1)).isoformat()
                                     else:
+                                        # Can't search without time
+                                        log_event('WARNING', f'No start time available for duplicate search')
                                         no_change += 1
+                                        raise Exception('No start time')
+                                    
+                                    log_event('DEBUG', f'Searching by time: timeMin={time_min}, timeMax={time_max}')
+                                    
+                                    # Search for ANY event in this time window
+                                    search_result = service.events().list(
+                                        calendarId=calendar_id,
+                                        singleEvents=True,
+                                        showDeleted=True,
+                                        timeMin=time_min,
+                                        timeMax=time_max,
+                                        maxResults=100
+                                    ).execute()
+                                    
+                                    log_event('INFO', f'Time-based search returned {len(search_result.get("items", []))} events')
+                                    
+                                    # Find event with matching start time (normalize to UTC)
+                                    found_event = None
+                                    ics_normalized = normalize_start_time_to_utc(start)
+                                    log_event('DEBUG', f'ICS normalized time: {ics_normalized}')
+                                    
+                                    for evt in search_result.get('items', []):
+                                        evt_start = evt.get('start', {})
+                                        evt_start_str = evt_start.get('date') or evt_start.get('dateTime', 'unknown')
+                                        evt_normalized = normalize_start_time_to_utc(evt_start)
+                                        evt_status = evt.get('status', 'unknown')
+                                        evt_summary = evt.get('summary', 'No title')
+                                        log_event('DEBUG', f'Found: "{evt_summary}" at {evt_start_str}, normalized={evt_normalized}, status={evt_status}')
+                                        
+                                        # Match by normalized UTC time
+                                        if evt_normalized == ics_normalized:
+                                            found_event = evt
+                                            log_event('INFO', f'Matched event: "{evt_summary}" (status: {evt_status})')
+                                            break
+                                    
+                                    if found_event:
+                                        # Add to our tracking dict for future syncs
+                                        existing_events[event_key] = found_event['id']
+                                        no_change += 1
+                                    else:
+                                        log_event('WARNING', f'Could not locate duplicate event despite 409 error')
+                                        no_change += 1
+                                        
                                 except Exception as search_error:
                                     log_event('WARNING', f'Failed to search for duplicate: {str(search_error)}')
                                     no_change += 1
