@@ -268,6 +268,16 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
         ics_events = get_ics_events(ics_cal, start, end)
         log('INFO', f'Found {len(ics_events)} ICS events')
         
+        # Debug: Log events on 10/31
+        for key, evt in ics_events.items():
+            start_dt = evt['start_dt']
+            if isinstance(start_dt, datetime):
+                local_dt = start_dt.astimezone(pytz.timezone(tz_name))
+                if local_dt.date().isoformat() == '2025-10-31':
+                    log('DEBUG', f"ICS 10/31 event: {evt['summary']} at {local_dt.strftime('%H:%M')} {tz_name}")
+            elif hasattr(start_dt, 'isoformat') and start_dt.isoformat() == '2025-10-31':
+                log('DEBUG', f"ICS 10/31 all-day: {evt['summary']}")
+        
         # Compare and find differences
         gcal_keys = set(gcal_events.keys())
         ics_keys = set(ics_events.keys())
