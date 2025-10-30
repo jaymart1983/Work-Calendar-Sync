@@ -192,6 +192,13 @@ def api_version():
     
     return jsonify({'version': version})
 
+@app.route('/api/stats/trend')
+def api_stats_trend():
+    """Get daily stats trend for the last 90 days."""
+    days = request.args.get('days', 90, type=int)
+    stats = sync_service.get_daily_stats(days)
+    return jsonify(stats)
+
 if __name__ == '__main__':
     # Create data directory if it doesn't exist
     base_dir = os.environ.get('APP_BASE_DIR', '/app')

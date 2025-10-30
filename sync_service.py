@@ -25,6 +25,7 @@ SECRETS_DIR = os.path.join(BASE_DIR, 'secrets')
 CONFIG_FILE = os.path.join(DATA_DIR, 'config.json')
 TOKEN_FILE = os.path.join(DATA_DIR, 'token.pickle')
 LOG_FILE = os.path.join(DATA_DIR, 'sync_logs.json')
+STATS_FILE = os.path.join(DATA_DIR, 'daily_stats.json')
 CREDENTIALS_FILE = os.path.join(SECRETS_DIR, 'credentials.json')
 
 log_buffer = []
@@ -48,6 +49,78 @@ def log(level, message):
 def get_logs(limit=100):
     with log_lock:
         return log_buffer[-limit:]
+
+def record_daily_stats(added, deleted):
+    """Record daily add/delete counts for trend analysis."""
+    from datetime import date
+    import json
+    
+    today = date.today().isoformat()
+    
+    # Load existing stats
+    stats = {}
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, 'r') as f:
+                stats = json.load(f)
+        except:
+            pass
+    
+    # Initialize today's stats if needed
+    if today not in stats:
+        stats[today] = {'added': 0, 'deleted': 0, 'syncs': 0}
+    
+    # Update stats
+    stats[today]['added'] += added
+    stats[today]['deleted'] += deleted
+    stats[today]['syncs'] += 1
+    
+    # Keep only last 90 days
+    from datetime import datetime, timedelta
+    cutoff_date = (date.today() - timedelta(days=90)).isoformat()
+    stats = {k: v for k, v in stats.items() if k >= cutoff_date}
+    
+    # Save stats
+    try:
+        os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
+        with open(STATS_FILE, 'w') as f:
+            json.dump(stats, f, indent=2)
+    except:
+        pass
+
+def get_daily_stats(days=90):
+    """Get daily stats for the last N days."""
+    from datetime import date, timedelta
+    import json
+    
+    stats = {}
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, 'r') as f:
+                stats = json.load(f)
+        except:
+            pass
+    
+    # Generate complete date range with zeros for missing days
+    result = []
+    for i in range(days):
+        day = (date.today() - timedelta(days=days-1-i)).isoformat()
+        if day in stats:
+            result.append({
+                'date': day,
+                'added': stats[day]['added'],
+                'deleted': stats[day]['deleted'],
+                'syncs': stats[day]['syncs']
+            })
+        else:
+            result.append({
+                'date': day,
+                'added': 0,
+                'deleted': 0,
+                'syncs': 0
+            })
+    
+    return result
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
@@ -314,6 +387,10 @@ def sync_calendar(ics_url, calendar_id, quick_sync=True):
                 log('ERROR', f"Add failed: {str(e)}")
         
         log('SUCCESS', f"Done: {added} added, {deleted} deleted, {len(unchanged)} unchanged")
+        
+        # Record daily stats
+        record_daily_stats(added, deleted)
+        
         return {'added': added, 'deleted': deleted, 'unchanged': len(unchanged)}
         
     except Exception as e:
