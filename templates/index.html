@@ -47,11 +47,21 @@
 </div>
 
 <div class="card">
-    <h2>90-Day Activity Trend</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h2 style="margin: 0;">Activity Trend</h2>
+        <select id="timeframeSelector" onchange="changeTimeframe()" style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">
+            <option value="1">Last 24 Hours</option>
+            <option value="7">Last 7 Days</option>
+            <option value="30">Last 30 Days</option>
+            <option value="90" selected>Last 90 Days</option>
+            <option value="180">Last 180 Days</option>
+            <option value="365">Last 365 Days</option>
+        </select>
+    </div>
     <div style="position: relative; height: 300px;">
         <canvas id="trendChart"></canvas>
     </div>
-    <p class="help-text" style="margin-top: 10px;">Shows daily adds and deletes over the last 90 days</p>
+    <p class="help-text" style="margin-top: 10px;">Shows daily adds and deletes for the selected timeframe</p>
 </div>
 
 <div class="card">
@@ -225,9 +235,16 @@
     
     // Load and render trend chart
     let trendChart = null;
+    let currentTimeframe = 90;
+    
+    function changeTimeframe() {
+        const selector = document.getElementById('timeframeSelector');
+        currentTimeframe = parseInt(selector.value);
+        loadTrendChart();
+    }
     
     function loadTrendChart() {
-        fetch('/api/stats/trend?days=90')
+        fetch(`/api/stats/trend?days=${currentTimeframe}`)
             .then(response => response.json())
             .then(data => {
                 const ctx = document.getElementById('trendChart').getContext('2d');
