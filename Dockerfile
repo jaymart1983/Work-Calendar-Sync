@@ -11,6 +11,10 @@ COPY sync_service.py .
 COPY web_app.py .
 COPY VERSION .
 COPY templates/ templates/
+
+# Bust cache for static files to ensure version.txt is updated
+ARG CACHE_BUST=unknown
+RUN echo "Cache bust: ${CACHE_BUST}"
 COPY static/ static/
 
 # Create directories for data and secrets
